@@ -1383,5 +1383,167 @@
         "fb30ac41b816d8"
       ]
     ]
+  },
+  {
+    "id": "ca37c84466bd1",
+    "type": "inject",
+    "z": "50ba04e22536e8",
+    "name": "07:00 Ranní hlášení",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "00 07 * * *",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 400,
+    "wires": [
+      [
+        "f135d851ddd648"
+      ]
+    ]
+  },
+  {
+    "id": "f135d851ddd648",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Sestavit ranní hlášení",
+    "func": "\nconst forecast = global.get('solar_forecast') || {};\nconst prices = global.get('enerspotPrices15') || [];\n\nconst todayKwh = Number(forecast.todayKwh || 0).toFixed(1);\nconst isSunny = forecast.isSunny;\nconst weatherIcon = isSunny ? '☀️' : '☁️';\nconst weatherText = isSunny ? 'slunečno' : 'oblačno/zataženo';\n\nlet cheapestText = '';\nconst now = new Date();\nconst todayDateStr = now.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit'});\n\n// Najít nejlevnější blok pro dnešní den\nconst todayPrices = prices.filter(p => p.day === todayDateStr && new Date(p.datetime).getTime() > now.getTime());\n\nif (todayPrices.length > 0) {\n    // Najít absolutní minimum\n    let minPrice = Math.min(...todayPrices.map(p => p.finalKcKwh));\n    let bestBlock = todayPrices.find(p => p.finalKcKwh === minPrice);\n    \n    // Zkusit najít souvislý blok levných cen\n    cheapestText = `💡 Nejlevnější elektřina dnes bude od **${bestBlock.time}** (jen **${minPrice.toFixed(2)} Kč/kWh**).`;\n} else {\n    cheapestText = '💡 Nemám data o dnešních budoucích cenách.';\n}\n\nmsg.payload = `Dobré ráno! ${weatherIcon} Dnes bude ${weatherText}, očekáváme výrobu cca **${todayKwh} kWh**.\\n${cheapestText}`;\nreturn msg;\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 400,
+    "wires": [
+      [
+        "fb30ac41b816d8"
+      ]
+    ]
+  },
+  {
+    "id": "a2a41306bc5b58",
+    "type": "inject",
+    "z": "50ba04e22536e8",
+    "name": "Každých 15 min",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "900",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 30,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 140,
+    "y": 500,
+    "wires": [
+      [
+        "b4e059f30bace8"
+      ]
+    ]
+  },
+  {
+    "id": "b4e059f30bace8",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Hlídač extrémů (+1 hodina)",
+    "func": "\nconst prices = global.get('enerspotPrices15') || [];\nconst t = global.get('latest_telemetry') || {};\nconst soc = Number(t.soc || 0).toFixed(0);\n\nconst nowMs = Date.now();\n// Díváme se na cenu, která bude za 1 hodinu (3600000 ms)\nconst targetMs = nowMs + 3600000; \n\nconst nextHourPrice = prices.find(p => {\n    const from = new Date(p.datetime).getTime();\n    const to = new Date(p.datetimeTo || (from + 900000)).getTime();\n    return targetMs >= from && targetMs < to;\n});\n\nif (!nextHourPrice) return null;\n\nconst price = nextHourPrice.finalKcKwh;\nconst timeStr = nextHourPrice.time;\nlet lastState = context.get('priceAlertState') || 'normal';\nlet msgOut = null;\n\nif (price < 0 && lastState !== 'negative') {\n    msgOut = { payload: `@everyone 💸 **Cena padá do silného záporu!**\\nOd ${timeStr} bude cena **${price.toFixed(2)} Kč/kWh** (už po odečtení provize!). Systém se připravuje na využití přebytků a zapínání bojleru.` };\n    context.set('priceAlertState', 'negative');\n} \nelse if (price > 8 && lastState !== 'high') {\n    msgOut = { payload: `@everyone ⚠️ **Pozor, blíží se cenový extrém!**\\nOd ${timeStr} vystřelí cena elektřiny na **${price.toFixed(2)} Kč/kWh**.\\nBaterie je aktuálně nabitá na ${soc} %, jsme připraveni to vykrýt.` };\n    context.set('priceAlertState', 'high');\n}\nelse if (price >= 0 && price <= 8 && lastState !== 'normal') {\n    context.set('priceAlertState', 'normal');\n}\n\nreturn msgOut;\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 500,
+    "wires": [
+      [
+        "fb30ac41b816d8"
+      ]
+    ]
+  },
+  {
+    "id": "168c69e8dfc458",
+    "type": "inject",
+    "z": "50ba04e22536e8",
+    "name": "23:58 Sběr denních dat",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "58 23 * * *",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 600,
+    "wires": [
+      [
+        "0ceb18c9822eb8"
+      ]
+    ]
+  },
+  {
+    "id": "0ceb18c9822eb8",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Zápis dne do paměti",
+    "func": "\nconst t = global.get('latest_telemetry') || {};\nconst yieldKwh = Number(t.solarYield ? t.solarYield.todayKwh : 0) || 0;\nconst importKwh = Number(t.soldEnergy ? t.soldEnergy.todayImportKwh : 0) || 0;\nconst exportKwh = Number(t.soldEnergy ? t.soldEnergy.todayKwh : 0) || 0;\nconst netKc = Number(t.soldEnergy ? t.soldEnergy.todayKc : 0) || 0;\n\nconst today = new Date().toLocaleDateString('cs-CZ');\n\nlet monthData = global.get('discord_monthly_stats') || [];\n\nmonthData.push({\n    date: today,\n    yield: yieldKwh,\n    import: importKwh,\n    export: exportKwh,\n    net: netKc\n});\n\nglobal.set('discord_monthly_stats', monthData);\nreturn null; // Zapisuje se jen potichu\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 600,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "030121e6ac25e",
+    "type": "inject",
+    "z": "50ba04e22536e8",
+    "name": "1. den v měsíci 08:00",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "00 08 1 * *",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 700,
+    "wires": [
+      [
+        "638cb920ef559"
+      ]
+    ]
+  },
+  {
+    "id": "638cb920ef559",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Sestavit a odeslat Report",
+    "func": "\nconst stats = global.get('discord_monthly_stats') || [];\n\nif (stats.length === 0) {\n    return { payload: \"📊 **Měsíční report:** Zatím nemám nasbíraná data za minulý měsíc.\" };\n}\n\nlet sumYield = 0;\nlet sumImport = 0;\nlet sumExport = 0;\nlet sumNet = 0;\n\nlet table = \"📅 **Datum** | ☀️ **Výroba** | 🔌 **Nákup** | ⚡ **Prodej** | 💰 **Bilance**\\n\";\ntable += \"---|---|---|---|---\\n\";\n\nstats.forEach(d => {\n    sumYield += d.yield;\n    sumImport += d.import;\n    sumExport += d.export;\n    sumNet += d.net;\n    \n    table += `${d.date} | ${d.yield.toFixed(1)} | ${d.import.toFixed(1)} | ${d.export.toFixed(1)} | ${d.net.toFixed(1)} Kč\\n`;\n});\n\n// Smazat data po vygenerování reportu, ať se sbírá nový měsíc\nglobal.set('discord_monthly_stats', []);\n\nconst finalMsg = `📉 **VELKÝ MĚSÍČNÍ REPORT (Minulý měsíc)** 📈\nTady jsou kompletní výsledky našeho energetického systému!\n\n**Celková měsíční bilance:**\n☀️ Vyrobeno z FV: **${sumYield.toFixed(1)} kWh**\n🔌 Nakoupeno ze sítě: **${sumImport.toFixed(1)} kWh**\n⚡ Prodáno do sítě: **${sumExport.toFixed(1)} kWh**\n💸 Celková finanční bilance: **${sumNet.toFixed(2)} Kč** ${sumNet >= 0 ? '🟢 (ČISTÝ ZISK)' : '🔴 (NÁKLAD)'}\n\nPodrobný rozpis po dnech:\n` + table;\n\n// Oříznout text, pokud by byl moc dlouhý pro Discord (limit 2000 znaků)\nif (finalMsg.length > 1950) {\n    return { payload: finalMsg.substring(0, 1950) + \"\\n... (tabulka oříznuta)\" };\n}\n\nreturn { payload: finalMsg };\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 410,
+    "y": 700,
+    "wires": [
+      [
+        "fb30ac41b816d8"
+      ]
+    ]
   }
 ]
