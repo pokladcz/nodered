@@ -1293,7 +1293,7 @@
   },
   {
     "id": "fb30ac41b816d8",
-    "type": "discordSendMessages",
+    "type": "discordSendMessage",
     "z": "50ba04e22536e8",
     "name": "Odeslat do Discordu",
     "client": "707f9f815c5b1",
