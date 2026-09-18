@@ -1252,81 +1252,105 @@
     "info": "Komunikace s Discordem"
   },
   {
-    "id": "7c5914eae89b38",
-    "type": "function",
+    "id": "707f9f815c5b1",
+    "type": "discord-client",
+    "name": "Solar Bot",
+    "token": "MTU1MDQ1OTE4MTQ2NTYwNDE5OQ.GuCars.BISoZa8MazYOmfKocf-avm0nQzmeS6g2oWqN1w",
+    "intents": 3276799
+  },
+  {
+    "id": "4ed445ddccfac8",
+    "type": "discordMessage",
     "z": "50ba04e22536e8",
-    "name": "Discord Command Router",
-    "func": "\n// Očekává text zprávy z Discordu v msg.payload\nconst text = String(msg.payload || '').trim().toLowerCase();\nlet reply = null;\nlet action = null;\n\nif (text === '!status') {\n    const soc = global.get('cerbo_batterySoc') || global.get('solax_last_battery_soc') || '?';\n    const grid = global.get('cerbo_acGridPower') || 0;\n    const pv = (global.get('cerbo_pvPower') || 0) + (global.get('solax_pvPower') || 0);\n    const price = global.get('currentPriceFinalKcKwh') || '?';\n    \n    reply = `📊 **Aktuální stav systému:**\\n🔋 Baterie: ${Number(soc).toFixed(1)} %\\n☀️ Výroba FV: ${Number(pv).toFixed(0)} W\\n🔌 Síť: ${Number(grid).toFixed(0)} W\\n💰 Cena: ${Number(price).toFixed(4)} Kč/kWh`;\n} \nelse if (text === '!auto') {\n    action = 'auto_on';\n    reply = '✅ Přepínám Victron do režimu **AUTO**';\n}\nelse if (text === '!inv') {\n    action = 'inverter_only';\n    reply = '✅ Přepínám Victron do režimu **INVERTER ONLY**';\n}\nelse if (text === '!ess') {\n    action = 'ess_on';\n    reply = '✅ Přepínám Victron do režimu **ESS**';\n}\nelse if (text === '!stop') {\n    action = 'force_charge_off';\n    reply = '🛑 Zastavuji nabíjení (Nouzový STOP)';\n}\nelse if (text === '!graf') {\n    // Generování URL pro QuickChart.io\n    const prices = global.get('enerspotPrices15') || [];\n    if (prices.length > 0) {\n        const labels = prices.slice(0, 24).map(p => p.time);\n        const data = prices.slice(0, 24).map(p => p.finalKcKwh || p.final);\n        \n        const chartConfig = {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [{\n                    label: 'Cena Kč/kWh',\n                    data: data,\n                    borderColor: 'rgb(59, 130, 246)',\n                    backgroundColor: 'rgba(59, 130, 246, 0.5)',\n                    fill: true\n                }]\n            }\n        };\n        const url = 'https://quickchart.io/chart?c=' + encodeURIComponent(JSON.stringify(chartConfig));\n        reply = `📈 **Graf dnešních cen:**\\n${url}`;\n    } else {\n        reply = '❌ Nemám data o cenách.';\n    }\n}\nelse if (text.startsWith('!')) {\n    reply = `❓ Neznámý příkaz. Dostupné příkazy:\\n` +\n            `**!status** - Aktuální stav (SoC, Výkon, Cena)\\n` +\n            `**!graf** - Graf cen pro dnešní den\\n` +\n            `**!auto** - Zapne režim AUTO\\n` +\n            `**!inv** - Zapne Inverter Only\\n` +\n            `**!ess** - Zapne ESS režim\\n` +\n            `**!stop** - Zastaví ruční nabíjení`;\n}\n\nconst msgs = [];\nif (reply) {\n    msgs.push({ payload: reply }); // Výstup 1: Odpověď do Discordu\n} else {\n    msgs.push(null);\n}\n\nif (action) {\n    msgs.push({ payload: { action: action } }); // Výstup 2: Akce do Dashboard Command Handleru\n} else {\n    msgs.push(null);\n}\n\nreturn msgs;\n",
-    "outputs": 2,
-    "noerr": 0,
-    "initialize": "",
-    "finalize": "",
-    "x": 400,
+    "name": "Příkazy z Discordu",
+    "client": "707f9f815c5b1",
+    "x": 150,
     "y": 100,
     "wires": [
-      [],
       [
-        "04014a4f404ed8"
+        "2d4eaef9ddbdd8"
       ]
     ]
   },
   {
-    "id": "04014a4f404ed8",
-    "type": "link out",
-    "z": "50ba04e22536e8",
-    "name": "To Cerbo Commands",
-    "mode": "link",
-    "links": [],
-    "x": 650,
-    "y": 120,
-    "wires": []
-  },
-  {
-    "id": "50ee225a7e61e8",
-    "type": "comment",
-    "z": "50ba04e22536e8",
-    "name": "⬆️ Sem zapojte 'discordMessage' uzel (vstup z Discordu)",
-    "info": "",
-    "x": 350,
-    "y": 60,
-    "wires": []
-  },
-  {
-    "id": "b274f8aafcc25",
-    "type": "comment",
-    "z": "50ba04e22536e8",
-    "name": "⬇️ Odsud zapojte 'discordMessage' uzel (výstup do Discordu)",
-    "info": "",
-    "x": 650,
-    "y": 80,
-    "wires": []
-  },
-  {
-    "id": "c8f743066ff86",
+    "id": "2d4eaef9ddbdd8",
     "type": "function",
     "z": "50ba04e22536e8",
-    "name": "Denní shrnutí (23:55)",
-    "func": "\nconst yieldKwh = global.get('cerbo_solarYieldToday') || 0;\nconst soldKwh = global.get('cerbo_soldEnergyToday') || 0;\nconst soldKc = global.get('cerbo_soldEnergyKcToday') || 0;\n\nmsg.payload = `📊 **Denní shrnutí:**\\n` +\n`☀️ Vyrobeno: ${Number(yieldKwh).toFixed(2)} kWh\\n` +\n`🔌 Prodáno do sítě: ${Number(soldKwh).toFixed(2)} kWh\\n` +\n`💸 Zisk z prodeje: ${Number(soldKc).toFixed(2)} Kč`;\n\nreturn msg;\n",
-    "outputs": 1,
+    "name": "Discord Command Router",
+    "func": "\n// Ignorovat zprávy od samotného bota\nif (msg.author && msg.author.bot) return null;\n\nconst text = String(msg.payload || '').trim().toLowerCase();\nlet reply = null;\nlet action = null;\nlet newSettings = null;\n\nif (text === '!status') {\n    const soc = global.get('cerbo_batterySoc') || global.get('solax_last_battery_soc') || '?';\n    const grid = global.get('cerbo_acGridPower') || 0;\n    const pv = (global.get('cerbo_pvPower') || 0) + (global.get('solax_pvPower') || 0);\n    const price = global.get('currentPriceFinalKcKwh') || '?';\n    \n    reply = `📊 **Aktuální stav systému:**\\n🔋 Baterie: ${Number(soc).toFixed(1)} %\\n☀️ Výroba FV: ${Number(pv).toFixed(0)} W\\n🔌 Síť: ${Number(grid).toFixed(0)} W\\n💰 Cena: ${Number(price).toFixed(4)} Kč/kWh`;\n} \nelse if (text === '!bms') {\n    const minC = global.get('cerbo_jkMinCellV') || '?';\n    const maxC = global.get('cerbo_jkMaxCellV') || '?';\n    const delta = global.get('cerbo_jkCellDeltaMv') || '?';\n    const temp = global.get('cerbo_batteryTempC') || '?';\n    reply = `🔋 **BMS Detaily:**\\n🌡️ Teplota: ${temp} °C\\n⚡ Články: ${minC} V / ${maxC} V (Δ ${delta} mV)`;\n}\nelse if (text === '!auto') {\n    action = 'auto_on';\n    reply = '✅ Přepínám Victron do režimu **AUTO**';\n}\nelse if (text === '!inv') {\n    action = 'inverter_only';\n    reply = '✅ Přepínám Victron do režimu **INVERTER ONLY**';\n}\nelse if (text === '!ess') {\n    action = 'ess_on';\n    reply = '✅ Přepínám Victron do režimu **ESS**';\n}\nelse if (text === '!stop') {\n    action = 'force_charge_off';\n    reply = '🛑 Zastavuji nabíjení (Nouzový STOP)';\n}\nelse if (text.startsWith('!rele1 ')) {\n    const cmd = text.split(' ')[1];\n    if (['on', 'off', 'auto'].includes(cmd)) {\n        action = 'relay1_' + cmd;\n        reply = `🔌 Relé 1 (Wattrouter) nastaveno na: **${cmd.toUpperCase()}**`;\n    }\n}\nelse if (text.startsWith('!rele2 ')) {\n    const cmd = text.split(' ')[1];\n    if (['on', 'off', 'auto'].includes(cmd)) {\n        action = 'relay2_' + cmd;\n        reply = `🔌 Relé 2 (Bojler) nastaveno na: **${cmd.toUpperCase()}**`;\n    }\n}\nelse if (text.startsWith('!limit ')) {\n    const num = Number(text.split(' ')[1].replace(',', '.'));\n    if (Number.isFinite(num)) {\n        newSettings = { chargeBelowFinalPriceKcKwh: num };\n        reply = `💰 Limit pro nabíjení **Victronu** změněn na: **${num.toFixed(2)} Kč/kWh**`;\n    }\n}\nelse if (text.startsWith('!solaxlimit ')) {\n    const num = Number(text.split(' ')[1].replace(',', '.'));\n    if (Number.isFinite(num)) {\n        newSettings = { solaxChargeBelowFinalPriceKcKwh: num };\n        reply = `💰 Limit pro nabíjení **SolaXu** změněn na: **${num.toFixed(2)} Kč/kWh**`;\n    }\n}\nelse if (text === '!graf') {\n    const prices = global.get('enerspotPrices15') || [];\n    if (prices.length > 0) {\n        const labels = prices.slice(0, 24).map(p => p.time);\n        const data = prices.slice(0, 24).map(p => p.finalKcKwh || p.final);\n        \n        const chartConfig = {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [{\n                    label: 'Cena Kč/kWh',\n                    data: data,\n                    borderColor: 'rgb(59, 130, 246)',\n                    backgroundColor: 'rgba(59, 130, 246, 0.5)',\n                    fill: true\n                }]\n            }\n        };\n        const url = 'https://quickchart.io/chart?c=' + encodeURIComponent(JSON.stringify(chartConfig));\n        reply = `📈 **Graf dnešních cen:**\\n${url}`;\n    } else {\n        reply = '❌ Nemám data o cenách.';\n    }\n}\nelse if (text.startsWith('!')) {\n    reply = `❓ Neznámý příkaz. Dostupné příkazy:\\n` +\n            `**!status** - Základní přehled\\n` +\n            `**!bms** - Detaily baterie a článků\\n` +\n            `**!graf** - Graf dnešních cen\\n` +\n            `**!limit <číslo>** - Změní limit nákupu pro Victron (např. !limit 1.50)\\n` +\n            `**!solaxlimit <číslo>** - Změní limit pro SolaX\\n` +\n            `**!rele1 <on/off/auto>** - Ovladač Wattrouteru\\n` +\n            `**!rele2 <on/off/auto>** - Ovladač Bojleru\\n` +\n            `**!auto** | **!inv** | **!ess** | **!stop** - Režimy Victronu`;\n}\n\nconst msgs = [];\n\n// Output 1: Reply to Discord\nif (reply) {\n    msgs.push({ payload: reply });\n} else {\n    msgs.push(null);\n}\n\n// Output 2: Action to Dashboard command handler\nif (action || newSettings) {\n    let outCmd = {};\n    if (action) outCmd.action = action;\n    if (newSettings) {\n        outCmd.action = 'save_settings';\n        outCmd.settings = newSettings;\n    }\n    msgs.push({ payload: outCmd });\n} else {\n    msgs.push(null);\n}\n\nreturn msgs;\n",
+    "outputs": 2,
     "noerr": 0,
     "x": 400,
-    "y": 300,
+    "y": 100,
     "wires": [
-      []
+      [
+        "fb30ac41b816d8"
+      ],
+      [
+        "prox_dash_send_fn_v131"
+      ]
     ]
   },
   {
-    "id": "dd1bf706da64f",
+    "id": "fb30ac41b816d8",
+    "type": "discordSendMessages",
+    "z": "50ba04e22536e8",
+    "name": "Odeslat do Discordu",
+    "client": "707f9f815c5b1",
+    "channel": "755058309211488358",
+    "x": 700,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "0b8509d19de41",
+    "type": "inject",
+    "z": "50ba04e22536e8",
+    "name": "1 min",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "60",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 200,
+    "wires": [
+      [
+        "ac785064440358"
+      ]
+    ]
+  },
+  {
+    "id": "ac785064440358",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Detekce výpadku a přetížení",
+    "func": "\nconst gridConnected = global.get('cerbo_vebusActiveInConnected');\nconst loadPower = global.get('cerbo_acGridPower') || 0; // Wait, consumption is cerbo_acConsumptionPower\nconst consumption = global.get('cerbo_acConsumptionPower') || 0;\n\nlet lastGrid = context.get('lastGrid');\nlet lastOverload = context.get('lastOverload') || false;\nlet msgOut = null;\n\nif (lastGrid !== undefined && gridConnected !== undefined) {\n    if (lastGrid === 1 && gridConnected === 0) {\n        msgOut = { payload: \"⚠️ **POZOR:** Výpadek sítě! AC Vstup je odpojen.\" };\n    } else if (lastGrid === 0 && gridConnected === 1) {\n        msgOut = { payload: \"✅ **INFO:** Síť byla obnovena. AC Vstup připojen.\" };\n    }\n}\ncontext.set('lastGrid', gridConnected);\n\nconst isOverloaded = consumption > 6500;\nif (isOverloaded && !lastOverload) {\n    if(!msgOut) msgOut = {payload: \"\"};\n    msgOut.payload += \"\\n⚠️ **VAROVÁNÍ:** Velké zatížení domu! Spotřeba je \" + Number(consumption).toFixed(0) + \" W.\";\n    context.set('lastOverload', true);\n} else if (!isOverloaded && lastOverload) {\n    context.set('lastOverload', false);\n}\n\nif (msgOut && msgOut.payload) {\n    return msgOut;\n}\nreturn null;\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 200,
+    "wires": [
+      [
+        "fb30ac41b816d8"
+      ]
+    ]
+  },
+  {
+    "id": "8e89afe5da7b98",
     "type": "inject",
     "z": "50ba04e22536e8",
     "name": "23:55",
     "props": [
       {
         "p": "payload"
-      },
-      {
-        "p": "topic",
-        "vt": "str"
       }
     ],
     "repeat": "",
@@ -1336,11 +1360,27 @@
     "topic": "",
     "payload": "",
     "payloadType": "date",
-    "x": 150,
+    "x": 130,
     "y": 300,
     "wires": [
       [
-        "c8f743066ff86"
+        "8f2c59c4c62b4"
+      ]
+    ]
+  },
+  {
+    "id": "8f2c59c4c62b4",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Denní shrnutí (23:55)",
+    "func": "\nconst yieldKwh = global.get('cerbo_solarYieldToday') || 0;\nconst soldKwh = global.get('cerbo_soldEnergyToday') || 0;\nconst soldKc = global.get('cerbo_soldEnergyKcToday') || 0;\nconst r2Kwh = global.get('cerbo_r2EnergyTodayKwh') || 0;\n\nmsg.payload = `📊 **Denní shrnutí (Půlnoc):**\\n` +\n`☀️ Vyrobeno: ${Number(yieldKwh).toFixed(2)} kWh\\n` +\n`🔌 Prodáno do sítě: ${Number(soldKwh).toFixed(2)} kWh\\n` +\n`💸 Zisk z prodeje: ${Number(soldKc).toFixed(2)} Kč\\n` +\n`🔥 Do bojleru (R2): ${Number(r2Kwh).toFixed(2)} kWh`;\n\nreturn msg;\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 300,
+    "wires": [
+      [
+        "fb30ac41b816d8"
       ]
     ]
   }
