@@ -1243,5 +1243,105 @@
         "prox_solax_http_parse"
       ]
     ]
+  },
+  {
+    "id": "50ba04e22536e8",
+    "type": "tab",
+    "label": "Discord Bot & Notifikace",
+    "disabled": false,
+    "info": "Komunikace s Discordem"
+  },
+  {
+    "id": "7c5914eae89b38",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Discord Command Router",
+    "func": "\n// Očekává text zprávy z Discordu v msg.payload\nconst text = String(msg.payload || '').trim().toLowerCase();\nlet reply = null;\nlet action = null;\n\nif (text === '!status') {\n    const soc = global.get('cerbo_batterySoc') || global.get('solax_last_battery_soc') || '?';\n    const grid = global.get('cerbo_acGridPower') || 0;\n    const pv = (global.get('cerbo_pvPower') || 0) + (global.get('solax_pvPower') || 0);\n    const price = global.get('currentPriceFinalKcKwh') || '?';\n    \n    reply = `📊 **Aktuální stav systému:**\\n🔋 Baterie: ${Number(soc).toFixed(1)} %\\n☀️ Výroba FV: ${Number(pv).toFixed(0)} W\\n🔌 Síť: ${Number(grid).toFixed(0)} W\\n💰 Cena: ${Number(price).toFixed(4)} Kč/kWh`;\n} \nelse if (text === '!auto') {\n    action = 'auto_on';\n    reply = '✅ Přepínám Victron do režimu **AUTO**';\n}\nelse if (text === '!inv') {\n    action = 'inverter_only';\n    reply = '✅ Přepínám Victron do režimu **INVERTER ONLY**';\n}\nelse if (text === '!ess') {\n    action = 'ess_on';\n    reply = '✅ Přepínám Victron do režimu **ESS**';\n}\nelse if (text === '!stop') {\n    action = 'force_charge_off';\n    reply = '🛑 Zastavuji nabíjení (Nouzový STOP)';\n}\nelse if (text === '!graf') {\n    // Generování URL pro QuickChart.io\n    const prices = global.get('enerspotPrices15') || [];\n    if (prices.length > 0) {\n        const labels = prices.slice(0, 24).map(p => p.time);\n        const data = prices.slice(0, 24).map(p => p.finalKcKwh || p.final);\n        \n        const chartConfig = {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [{\n                    label: 'Cena Kč/kWh',\n                    data: data,\n                    borderColor: 'rgb(59, 130, 246)',\n                    backgroundColor: 'rgba(59, 130, 246, 0.5)',\n                    fill: true\n                }]\n            }\n        };\n        const url = 'https://quickchart.io/chart?c=' + encodeURIComponent(JSON.stringify(chartConfig));\n        reply = `📈 **Graf dnešních cen:**\\n${url}`;\n    } else {\n        reply = '❌ Nemám data o cenách.';\n    }\n}\nelse if (text.startsWith('!')) {\n    reply = `❓ Neznámý příkaz. Dostupné příkazy:\\n` +\n            `**!status** - Aktuální stav (SoC, Výkon, Cena)\\n` +\n            `**!graf** - Graf cen pro dnešní den\\n` +\n            `**!auto** - Zapne režim AUTO\\n` +\n            `**!inv** - Zapne Inverter Only\\n` +\n            `**!ess** - Zapne ESS režim\\n` +\n            `**!stop** - Zastaví ruční nabíjení`;\n}\n\nconst msgs = [];\nif (reply) {\n    msgs.push({ payload: reply }); // Výstup 1: Odpověď do Discordu\n} else {\n    msgs.push(null);\n}\n\nif (action) {\n    msgs.push({ payload: { action: action } }); // Výstup 2: Akce do Dashboard Command Handleru\n} else {\n    msgs.push(null);\n}\n\nreturn msgs;\n",
+    "outputs": 2,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 400,
+    "y": 100,
+    "wires": [
+      [],
+      [
+        "04014a4f404ed8"
+      ]
+    ]
+  },
+  {
+    "id": "04014a4f404ed8",
+    "type": "link out",
+    "z": "50ba04e22536e8",
+    "name": "To Cerbo Commands",
+    "mode": "link",
+    "links": [],
+    "x": 650,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "50ee225a7e61e8",
+    "type": "comment",
+    "z": "50ba04e22536e8",
+    "name": "⬆️ Sem zapojte 'discordMessage' uzel (vstup z Discordu)",
+    "info": "",
+    "x": 350,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "b274f8aafcc25",
+    "type": "comment",
+    "z": "50ba04e22536e8",
+    "name": "⬇️ Odsud zapojte 'discordMessage' uzel (výstup do Discordu)",
+    "info": "",
+    "x": 650,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "c8f743066ff86",
+    "type": "function",
+    "z": "50ba04e22536e8",
+    "name": "Denní shrnutí (23:55)",
+    "func": "\nconst yieldKwh = global.get('cerbo_solarYieldToday') || 0;\nconst soldKwh = global.get('cerbo_soldEnergyToday') || 0;\nconst soldKc = global.get('cerbo_soldEnergyKcToday') || 0;\n\nmsg.payload = `📊 **Denní shrnutí:**\\n` +\n`☀️ Vyrobeno: ${Number(yieldKwh).toFixed(2)} kWh\\n` +\n`🔌 Prodáno do sítě: ${Number(soldKwh).toFixed(2)} kWh\\n` +\n`💸 Zisk z prodeje: ${Number(soldKc).toFixed(2)} Kč`;\n\nreturn msg;\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 300,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "dd1bf706da64f",
+    "type": "inject",
+    "z": "50ba04e22536e8",
+    "name": "23:55",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "55 23 * * *",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 300,
+    "wires": [
+      [
+        "c8f743066ff86"
+      ]
+    ]
   }
 ]
