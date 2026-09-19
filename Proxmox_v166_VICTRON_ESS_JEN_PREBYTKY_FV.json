@@ -1245,37 +1245,31 @@
     ]
   },
   {
-    "id": "50ba04e22536e8",
+    "id": "7e59dbd18cdba2d6",
     "type": "tab",
     "label": "Discord Bot & Notifikace",
     "disabled": false,
     "info": "Komunikace s Discordem"
   },
   {
-    "id": "707f9f815c5b1",
-    "type": "discord-client",
-    "name": "Solar Bot",
-    "token": "MTU1MDQ1OTE4MTQ2NTYwNDE5OQ.GuCars.BISoZa8MazYOmfKocf-avm0nQzmeS6g2oWqN1w",
-    "intents": 33280
-  },
-  {
-    "id": "4ed445ddccfac8",
+    "id": "54929d1dc2652665",
     "type": "discordMessage",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Příkazy z Discordu",
-    "client": "707f9f815c5b1",
+    "channelIdFilter": "",
+    "token": "discord_token_auto",
     "x": 150,
     "y": 100,
     "wires": [
       [
-        "2d4eaef9ddbdd8"
+        "0a72e3abad5c8d2d"
       ]
     ]
   },
   {
-    "id": "2d4eaef9ddbdd8",
+    "id": "0a72e3abad5c8d2d",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Discord Command Router",
     "func": "\n// Ignorovat zprávy od samotného bota\nif (msg.author && msg.author.bot) return null;\n\nconst text = String(msg.payload || '').trim().toLowerCase();\nlet reply = null;\nlet action = null;\nlet newSettings = null;\n\n// Načtení dat z nejnovější telemetrie (ukládá Sjednocený parser)\nconst t = global.get('latest_telemetry') || {};\n\nfunction fmt(v, d=1) { \n    const n = Number(v); \n    if(!Number.isFinite(n)) return '—'; \n    return new Intl.NumberFormat('cs-CZ', { minimumFractionDigits: d, maximumFractionDigits: d }).format(n); \n}\n\nif (text === '!status') {\n    const soc = t.soc;\n    const grid = t.grid;\n    const load = t.load;\n    const pv = (t.pvPower || 0) + (t.solaxDashboard ? (t.solaxDashboard.pvPowerW || 0) : 0);\n    const price = t.currentPrice ? t.currentPrice.final : null;\n    const priceLimit = t.priceLimit;\n    const mode = t.actualModeName || 'Neznámý';\n    const r1 = t.cerboRelay1Actual ? 'ZAPNUTO 🟢' : 'VYPNUTO 🔴';\n    const r2 = t.cerboRelay2Actual ? 'ZAPNUTO 🟢' : 'VYPNUTO 🔴';\n\n    const sState = global.get('solax_charge_decision') || {};\n    const solaxMsg = sState.reason ? sState.reason.split('(')[0].trim() : 'Neznámý';\n    \n    reply = `📊 **AKTUÁLNÍ STAV SYSTÉMU:**\\n` +\n            `🔋 **Baterie:** ${fmt(soc, 1)} %\\n` +\n            `☀️ **Výroba FV:** ${fmt(pv, 0)} W\\n` +\n            `🏠 **Spotřeba domu:** ${fmt(load, 0)} W\\n` +\n            `🔌 **Síť (nákup/prodej):** ${fmt(grid, 0)} W\\n` +\n            `\\n💰 **Cena elektřiny:** ${fmt(price, 4)} Kč/kWh (Limit Victron: ${fmt(priceLimit, 2)} Kč)\\n` +\n            `⚙️ **Režim Victronu:** ${mode}\\n` +\n            `⚡ **Stav SolaXu:** ${solaxMsg}\\n` +\n            `\\n🔌 **Relé 1 (Wattrouter):** ${r1}\\n` +\n            `🔥 **Relé 2 (Bojler):** ${r2}\\n` +\n            `\\n⏱️ *Aktualizováno: ${t.now || '?' }*`;\n} \nelse if (text === '!bms') {\n    reply = `🔋 **BMS Detaily:**\\n` +\n            `🌡️ Teplota: ${fmt(t.batteryTempC || t.temp, 1)} °C\\n` +\n            `⚡ Články min/max: ${fmt(t.minCell, 3)} V / ${fmt(t.maxCell, 3)} V\\n` +\n            `📐 Odchylka (Delta): ${fmt(t.deltaMv, 1)} mV\\n` +\n            `🔋 Proud BMS: ${fmt(t.current, 1)} A (${fmt(t.power, 0)} W)`;\n}\nelse if (text === '!auto') {\n    action = 'auto_on';\n    reply = '✅ Přepínám Victron do režimu **AUTO**';\n}\nelse if (text === '!inv') {\n    action = 'inverter_only';\n    reply = '✅ Přepínám Victron do režimu **INVERTER ONLY**';\n}\nelse if (text === '!ess') {\n    action = 'ess_on';\n    reply = '✅ Přepínám Victron do režimu **ESS**';\n}\nelse if (text === '!stop') {\n    action = 'force_charge_off';\n    reply = '🛑 Zastavuji nabíjení (Nouzový STOP)';\n}\nelse if (text.startsWith('!rele1 ')) {\n    const cmd = text.split(' ')[1];\n    if (['on', 'off', 'auto'].includes(cmd)) {\n        action = 'relay1_' + cmd;\n        reply = `🔌 Relé 1 (Wattrouter) nastaveno na: **${cmd.toUpperCase()}**`;\n    }\n}\nelse if (text.startsWith('!rele2 ')) {\n    const cmd = text.split(' ')[1];\n    if (['on', 'off', 'auto'].includes(cmd)) {\n        action = 'relay2_' + cmd;\n        reply = `🔥 Relé 2 (Bojler) nastaveno na: **${cmd.toUpperCase()}**`;\n    }\n}\nelse if (text.startsWith('!limit ')) {\n    const num = Number(text.split(' ')[1].replace(',', '.'));\n    if (Number.isFinite(num)) {\n        newSettings = { chargeBelowFinalPriceKcKwh: num };\n        reply = `💰 Limit pro nabíjení **Victronu** změněn na: **${fmt(num, 2)} Kč/kWh**`;\n    }\n}\nelse if (text.startsWith('!solaxlimit ')) {\n    const num = Number(text.split(' ')[1].replace(',', '.'));\n    if (Number.isFinite(num)) {\n        newSettings = { solaxChargeBelowFinalPriceKcKwh: num };\n        reply = `💰 Limit pro nabíjení **SolaXu** změněn na: **${fmt(num, 2)} Kč/kWh**`;\n    }\n}\nelse if (text === '!graf') {\n    const prices = global.get('enerspotPrices15') || [];\n    if (prices.length > 0) {\n        const labels = prices.slice(0, 24).map(p => p.time);\n        const data = prices.slice(0, 24).map(p => p.finalKcKwh || p.final);\n        \n        const chartConfig = {\n            type: 'line',\n            data: {\n                labels: labels,\n                datasets: [{\n                    label: 'Cena Kč/kWh',\n                    data: data,\n                    borderColor: 'rgb(59, 130, 246)',\n                    backgroundColor: 'rgba(59, 130, 246, 0.5)',\n                    fill: true\n                }]\n            }\n        };\n        const url = 'https://quickchart.io/chart?c=' + encodeURIComponent(JSON.stringify(chartConfig));\n        reply = `📈 **Graf dnešních cen:**\\n${url}`;\n    } else {\n        reply = '❌ Nemám data o cenách.';\n    }\n}\nelse if (text === '!prikazy' || text === '!help' || text === 'příkazy' || text === 'prikazy') {\n    reply = `💡 **Dostupné příkazy:**\\n` +\n            `**!status** - Základní přehled (Baterie, FV, Síť, Cena, Relé)\\n` +\n            `**!bms** - Detaily baterie a článků\\n` +\n            `**!graf** - Graf dnešních cen z Enerspotu\\n` +\n            `**!limit <číslo>** - Změní limit nákupu pro Victron (např. !limit 1.50)\\n` +\n            `**!solaxlimit <číslo>** - Změní limit nákupu pro SolaX\\n` +\n            `**!rele1 <on/off/auto>** - Ovladač Wattrouteru (např. !rele1 on)\\n` +\n            `**!rele2 <on/off/auto>** - Ovladač Bojleru\\n` +\n            `**!auto** | **!inv** | **!ess** | **!stop** - Režimy Victronu\\n` +\n            `**!update** - Stáhne a aplikuje nejnovější verzi bota z GitHubu`;\n}\nelse if (text === '!update') {\n    reply = '🔄 **Autoupdate:** Stahuji nejnovější verzi z GitHubu a restartuji toky... Chvilku strpení!';\n    action = 'update_nodered';\n}\nelse if (text.startsWith('!')) {\n    reply = `❓ **Neznámý příkaz.** Napište **!prikazy** pro zobrazení nápovědy.`;\n}\n\nconst msgs = [];\n\n// Output 1: Reply to Discord\nif (reply) {\n    msgs.push({ payload: reply });\n} else {\n    msgs.push(null);\n}\n\n// Output 2: Action to Dashboard command handler\n// Output 3: System action (update)\nif (action === 'update_nodered') {\n    msgs.push(null);\n    msgs.push({ payload: 'run' });\n} else if (action || newSettings) {\n    let outCmd = {};\n    if (action) outCmd.action = action;\n    if (newSettings) {\n        outCmd.action = 'save_settings';\n        outCmd.settings = newSettings;\n    }\n    msgs.push({ payload: outCmd });\n    msgs.push(null);\n} else {\n    msgs.push(null);\n    msgs.push(null);\n}\n\nreturn msgs;\n",
     "outputs": 3,
@@ -1284,31 +1278,31 @@
     "y": 100,
     "wires": [
       [
-        "fb30ac41b816d8"
+        "ae46d16565bf08dd"
       ],
+      [],
       [
-        "prox_dash_send_fn_v131"
-      ],
-      [
-        "auto_update_exec"
+        "40deb6f5125a4363"
       ]
     ]
   },
   {
-    "id": "fb30ac41b816d8",
+    "id": "ae46d16565bf08dd",
     "type": "discordMessageManager",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Odeslat do Discordu",
-    "client": "707f9f815c5b1",
     "channel": "755058309211488358",
+    "token": "discord_token_auto",
     "x": 700,
-    "y": 200,
-    "wires": []
+    "y": 320,
+    "wires": [
+      []
+    ]
   },
   {
-    "id": "0b8509d19de41",
+    "id": "5b990e9eb6bd3a4a",
     "type": "inject",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "1 min",
     "props": [
       {
@@ -1326,14 +1320,14 @@
     "y": 200,
     "wires": [
       [
-        "ac785064440358"
+        "3854ea343df02d3d"
       ]
     ]
   },
   {
-    "id": "ac785064440358",
+    "id": "3854ea343df02d3d",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Detekce výpadku a přetížení",
     "func": "\nconst gridConnected = global.get('cerbo_vebusActiveInConnected');\nconst loadPower = global.get('cerbo_acGridPower') || 0; // Wait, consumption is cerbo_acConsumptionPower\nconst consumption = global.get('cerbo_acConsumptionPower') || 0;\n\nlet lastGrid = context.get('lastGrid');\nlet lastOverload = context.get('lastOverload') || false;\nlet msgOut = null;\n\nif (lastGrid !== undefined && gridConnected !== undefined) {\n    if (lastGrid === 1 && gridConnected === 0) {\n        msgOut = { payload: \"⚠️ **POZOR:** Výpadek sítě! AC Vstup je odpojen.\" };\n    } else if (lastGrid === 0 && gridConnected === 1) {\n        msgOut = { payload: \"✅ **INFO:** Síť byla obnovena. AC Vstup připojen.\" };\n    }\n}\ncontext.set('lastGrid', gridConnected);\n\nconst isOverloaded = consumption > 6500;\nif (isOverloaded && !lastOverload) {\n    if(!msgOut) msgOut = {payload: \"\"};\n    msgOut.payload += \"\\n⚠️ **VAROVÁNÍ:** Velké zatížení domu! Spotřeba je \" + Number(consumption).toFixed(0) + \" W.\";\n    context.set('lastOverload', true);\n} else if (!isOverloaded && lastOverload) {\n    context.set('lastOverload', false);\n}\n\nif (msgOut && msgOut.payload) {\n    return msgOut;\n}\nreturn null;\n",
     "outputs": 1,
@@ -1342,14 +1336,14 @@
     "y": 200,
     "wires": [
       [
-        "fb30ac41b816d8"
+        "ae46d16565bf08dd"
       ]
     ]
   },
   {
-    "id": "8e89afe5da7b98",
+    "id": "edd5ac20814a6f97",
     "type": "inject",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "23:55",
     "props": [
       {
@@ -1367,14 +1361,14 @@
     "y": 300,
     "wires": [
       [
-        "8f2c59c4c62b4"
+        "6539e707c2443a77"
       ]
     ]
   },
   {
-    "id": "8f2c59c4c62b4",
+    "id": "6539e707c2443a77",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Denní shrnutí (23:55)",
     "func": "\nconst yieldKwh = global.get('cerbo_solarYieldToday') || 0;\nconst soldKwh = global.get('cerbo_soldEnergyToday') || 0;\nconst soldKc = global.get('cerbo_soldEnergyKcToday') || 0;\nconst r2Kwh = global.get('cerbo_r2EnergyTodayKwh') || 0;\n\nmsg.payload = `📊 **Denní shrnutí (Půlnoc):**\\n` +\n`☀️ Vyrobeno: ${Number(yieldKwh).toFixed(2)} kWh\\n` +\n`🔌 Prodáno do sítě: ${Number(soldKwh).toFixed(2)} kWh\\n` +\n`💸 Zisk z prodeje: ${Number(soldKc).toFixed(2)} Kč\\n` +\n`🔥 Do bojleru (R2): ${Number(r2Kwh).toFixed(2)} kWh`;\n\nreturn msg;\n",
     "outputs": 1,
@@ -1383,14 +1377,14 @@
     "y": 300,
     "wires": [
       [
-        "fb30ac41b816d8"
+        "ae46d16565bf08dd"
       ]
     ]
   },
   {
-    "id": "ca37c84466bd1",
+    "id": "fabe3b243edc0af4",
     "type": "inject",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "07:00 Ranní hlášení",
     "props": [
       {
@@ -1408,14 +1402,14 @@
     "y": 400,
     "wires": [
       [
-        "f135d851ddd648"
+        "17fa2b0f4f9548af"
       ]
     ]
   },
   {
-    "id": "f135d851ddd648",
+    "id": "17fa2b0f4f9548af",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Sestavit ranní hlášení",
     "func": "\nconst forecast = global.get('solar_forecast') || {};\nconst prices = global.get('enerspotPrices15') || [];\n\nconst todayKwh = Number(forecast.todayKwh || 0).toFixed(1);\nconst isSunny = forecast.isSunny;\nconst weatherIcon = isSunny ? '☀️' : '☁️';\nconst weatherText = isSunny ? 'slunečno' : 'oblačno/zataženo';\n\nlet cheapestText = '';\nconst now = new Date();\nconst todayDateStr = now.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit'});\n\n// Najít nejlevnější blok pro dnešní den\nconst todayPrices = prices.filter(p => p.day === todayDateStr && new Date(p.datetime).getTime() > now.getTime());\n\nif (todayPrices.length > 0) {\n    // Najít absolutní minimum\n    let minPrice = Math.min(...todayPrices.map(p => p.finalKcKwh));\n    let bestBlock = todayPrices.find(p => p.finalKcKwh === minPrice);\n    \n    // Zkusit najít souvislý blok levných cen\n    cheapestText = `💡 Nejlevnější elektřina dnes bude od **${bestBlock.time}** (jen **${minPrice.toFixed(2)} Kč/kWh**).`;\n} else {\n    cheapestText = '💡 Nemám data o dnešních budoucích cenách.';\n}\n\nmsg.payload = `Dobré ráno! ${weatherIcon} Dnes bude ${weatherText}, očekáváme výrobu cca **${todayKwh} kWh**.\\n${cheapestText}`;\nreturn msg;\n",
     "outputs": 1,
@@ -1424,14 +1418,14 @@
     "y": 400,
     "wires": [
       [
-        "fb30ac41b816d8"
+        "ae46d16565bf08dd"
       ]
     ]
   },
   {
-    "id": "a2a41306bc5b58",
+    "id": "1a7d23852b58c90d",
     "type": "inject",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Každých 15 min",
     "props": [
       {
@@ -1449,14 +1443,14 @@
     "y": 500,
     "wires": [
       [
-        "b4e059f30bace8"
+        "06e4801e9932946d"
       ]
     ]
   },
   {
-    "id": "b4e059f30bace8",
+    "id": "06e4801e9932946d",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Hlídač extrémů (+1 hodina)",
     "func": "\nconst prices = global.get('enerspotPrices15') || [];\nconst t = global.get('latest_telemetry') || {};\nconst soc = Number(t.soc || 0).toFixed(0);\n\nconst nowMs = Date.now();\nconst targetMs = nowMs + 3600000; \n\nconst nextHourPrice = prices.find(p => {\n    const from = new Date(p.datetime || p.dateTime || p.time || 0).getTime();\n    let to = new Date(p.datetimeTo || p.dateTimeTo || p.end || 0).getTime();\n    if (!(to > from)) to = from + 900000;\n    return targetMs >= from && targetMs < to;\n});\n\nif (!nextHourPrice) return null;\n\nconst price = nextHourPrice.finalKcKwh;\n\n// Správný převod času od-do\nconst fromDate = new Date(nextHourPrice.datetime || nextHourPrice.dateTime || nextHourPrice.time);\nconst toDate = new Date(nextHourPrice.datetimeTo || nextHourPrice.dateTimeTo || nextHourPrice.end || (fromDate.getTime() + 900000));\n\nconst pad = (n) => n.toString().padStart(2, '0');\nconst timeStr = `${pad(fromDate.getHours())}:${pad(fromDate.getMinutes())} do ${pad(toDate.getHours())}:${pad(toDate.getMinutes())}`;\n\nlet lastState = context.get('priceAlertState') || 'normal';\nlet msgOut = null;\n\nif (price < 0 && lastState !== 'negative') {\n    msgOut = { payload: `@everyone 💸 **Cena padá do silného záporu!**\\nOd ${timeStr} bude cena **${price.toFixed(2)} Kč/kWh** (už po odečtení provize!). Systém se připravuje na využití přebytků a zapínání bojleru.` };\n    context.set('priceAlertState', 'negative');\n} \nelse if (price > 8 && lastState !== 'high') {\n    msgOut = { payload: `@everyone ⚠️ **Pozor, blíží se cenový extrém!**\\nOd ${timeStr} vystřelí cena elektřiny na **${price.toFixed(2)} Kč/kWh**.\\nBaterie je aktuálně nabitá na ${soc} %, jsme připraveni to vykrýt.` };\n    context.set('priceAlertState', 'high');\n}\nelse if (price >= 0 && price <= 8 && lastState !== 'normal') {\n    context.set('priceAlertState', 'normal');\n}\n\nreturn msgOut;\n",
     "outputs": 1,
@@ -1465,14 +1459,14 @@
     "y": 500,
     "wires": [
       [
-        "fb30ac41b816d8"
+        "ae46d16565bf08dd"
       ]
     ]
   },
   {
-    "id": "168c69e8dfc458",
+    "id": "86f7d4fe013b3226",
     "type": "inject",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "23:58 Sběr denních dat",
     "props": [
       {
@@ -1490,14 +1484,14 @@
     "y": 600,
     "wires": [
       [
-        "0ceb18c9822eb8"
+        "e537c26bb1e8cdb0"
       ]
     ]
   },
   {
-    "id": "0ceb18c9822eb8",
+    "id": "e537c26bb1e8cdb0",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Zápis dne do paměti",
     "func": "\nconst t = global.get('latest_telemetry') || {};\nconst yieldKwh = Number(t.solarYield ? t.solarYield.todayKwh : 0) || 0;\nconst importKwh = Number(t.soldEnergy ? t.soldEnergy.todayImportKwh : 0) || 0;\nconst exportKwh = Number(t.soldEnergy ? t.soldEnergy.todayKwh : 0) || 0;\nconst netKc = Number(t.soldEnergy ? t.soldEnergy.todayKc : 0) || 0;\n\nconst today = new Date().toLocaleDateString('cs-CZ');\n\nlet monthData = global.get('discord_monthly_stats') || [];\n\nmonthData.push({\n    date: today,\n    yield: yieldKwh,\n    import: importKwh,\n    export: exportKwh,\n    net: netKc\n});\n\nglobal.set('discord_monthly_stats', monthData);\nreturn null; // Zapisuje se jen potichu\n",
     "outputs": 1,
@@ -1509,9 +1503,9 @@
     ]
   },
   {
-    "id": "030121e6ac25e",
+    "id": "217c4ad1f33179ee",
     "type": "inject",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "1. den v měsíci 08:00",
     "props": [
       {
@@ -1529,14 +1523,14 @@
     "y": 700,
     "wires": [
       [
-        "638cb920ef559"
+        "5c27a322bc99b435"
       ]
     ]
   },
   {
-    "id": "638cb920ef559",
+    "id": "5c27a322bc99b435",
     "type": "function",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "name": "Sestavit a odeslat Report",
     "func": "\nconst stats = global.get('discord_monthly_stats') || [];\n\nif (stats.length === 0) {\n    return { payload: \"📊 **Měsíční report:** Zatím nemám nasbíraná data za minulý měsíc.\" };\n}\n\nlet sumYield = 0;\nlet sumImport = 0;\nlet sumExport = 0;\nlet sumNet = 0;\n\nlet table = \"📅 **Datum** | ☀️ **Výroba** | 🔌 **Nákup** | ⚡ **Prodej** | 💰 **Bilance**\\n\";\ntable += \"---|---|---|---|---\\n\";\n\nstats.forEach(d => {\n    sumYield += d.yield;\n    sumImport += d.import;\n    sumExport += d.export;\n    sumNet += d.net;\n    \n    table += `${d.date} | ${d.yield.toFixed(1)} | ${d.import.toFixed(1)} | ${d.export.toFixed(1)} | ${d.net.toFixed(1)} Kč\\n`;\n});\n\n// Smazat data po vygenerování reportu, ať se sbírá nový měsíc\nglobal.set('discord_monthly_stats', []);\n\nconst finalMsg = `📉 **VELKÝ MĚSÍČNÍ REPORT (Minulý měsíc)** 📈\nTady jsou kompletní výsledky našeho energetického systému!\n\n**Celková měsíční bilance:**\n☀️ Vyrobeno z FV: **${sumYield.toFixed(1)} kWh**\n🔌 Nakoupeno ze sítě: **${sumImport.toFixed(1)} kWh**\n⚡ Prodáno do sítě: **${sumExport.toFixed(1)} kWh**\n💸 Celková finanční bilance: **${sumNet.toFixed(2)} Kč** ${sumNet >= 0 ? '🟢 (ČISTÝ ZISK)' : '🔴 (NÁKLAD)'}\n\nPodrobný rozpis po dnech:\n` + table;\n\n// Oříznout text, pokud by byl moc dlouhý pro Discord (limit 2000 znaků)\nif (finalMsg.length > 1950) {\n    return { payload: finalMsg.substring(0, 1950) + \"\\n... (tabulka oříznuta)\" };\n}\n\nreturn { payload: finalMsg };\n",
     "outputs": 1,
@@ -1545,14 +1539,14 @@
     "y": 700,
     "wires": [
       [
-        "fb30ac41b816d8"
+        "ae46d16565bf08dd"
       ]
     ]
   },
   {
-    "id": "auto_update_exec",
+    "id": "40deb6f5125a4363",
     "type": "exec",
-    "z": "50ba04e22536e8",
+    "z": "7e59dbd18cdba2d6",
     "command": "curl -sL \"https://raw.githubusercontent.com/pokladcz/nodered/main/Proxmox_v166_VICTRON_ESS_JEN_PREBYTKY_FV.json\" > /tmp/new_flow.json && curl -s -H \"Content-Type: application/json\" -H \"Node-RED-Deployment-Type: full\" -X POST -d @/tmp/new_flow.json http://127.0.0.1:1880/flows",
     "addpay": "",
     "append": "",
@@ -1568,5 +1562,20 @@
       [],
       []
     ]
+  },
+  {
+    "id": "65c8603d149fcc79",
+    "type": "global-config",
+    "env": [],
+    "modules": {
+      "node-red-contrib-discord-advanced": "3.6.0"
+    }
+  },
+  {
+    "id": "discord_token_auto",
+    "type": "discord-token",
+    "name": "Solar Bot Token",
+    "token": "MTU1MDQ1OTE4MTQ2NTYwNDE5OQ.GuCars.BISoZa8MazYOmfKocf-avm0nQzmeS6g2oWqN1w",
+    "intents": 33280
   }
 ]
