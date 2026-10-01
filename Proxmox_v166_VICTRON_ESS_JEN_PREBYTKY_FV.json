@@ -1443,7 +1443,8 @@
     "y": 500,
     "wires": [
       [
-        "06e4801e9932946d"
+        "06e4801e9932946d",
+        "sys_watchdog_v1"
       ]
     ]
   },
@@ -1628,6 +1629,22 @@
     "y": 800,
     "wires": [
       []
+    ]
+  },
+  {
+    "id": "sys_watchdog_v1",
+    "type": "function",
+    "z": "7e59dbd18cdba2d6",
+    "name": "Systémový hlídač (Watchdog)",
+    "func": "\nconst t = global.get('latest_telemetry') || {};\nif (!t.ts) return null;\n\nlet alerts = context.get('sentAlerts') || {};\nlet msgs = [];\n\n// 1. Časová synchronizace (NTP Desync)\nconst cerboTime = new Date(t.ts).getTime();\nconst proxmoxTime = Date.now();\nconst timeDiff = Math.abs(cerboTime - proxmoxTime) / 60000; // v minutách\n\nif (timeDiff > 5) { // víc jak 5 minut rozdíl\n    if (!alerts.time) {\n        msgs.push({ payload: `⚠️ **KRITICKÁ CHYBA ČASU:**\\nCerbo a Proxmox mají rozdílný čas (odchylka ${timeDiff.toFixed(1)} minut). To může způsobit chybné cenové nabíjení. Zkontrolujte připojení Cerba k internetu a nastavení času.` });\n        alerts.time = true;\n    }\n} else {\n    alerts.time = false;\n}\n\n// 2. SolaX Zamrznutí\nconst solax = t.solaxDashboard || {};\nif (!solax.ok && solax.ageMin > 60) {\n    if (!alerts.solax) {\n        msgs.push({ payload: `🔌 **SOLAX OFFLINE:**\\nSolaX WiFi modul neodpovídá už více než ${Math.round(solax.ageMin)} minut. Dům běží dál, ale data ze SolaXu nejsou k dispozici. Zkuste WiFi dongle fyzicky vytáhnout a znovu zastrčit.` });\n        alerts.solax = true;\n    }\n} else if (solax.ok) {\n    alerts.solax = false;\n}\n\n// 3. Enerspot Výpadek\nconst ps = t.priceStatus || {};\nif (!ps.ok && ps.ageMin > 180) { // 3 hodiny bez dat\n    if (!alerts.enerspot) {\n        msgs.push({ payload: `🌐 **ENERSPOT OFFLINE:**\\nData o cenách elektřiny se nepodařilo stáhnout déle než 3 hodiny. Automatické cenové řízení bylo z bezpečnostních důvodů uspáno. Systém přešel na čistě solární režim.` });\n        alerts.enerspot = true;\n    }\n} else if (ps.ok) {\n    alerts.enerspot = false;\n}\n\n// 4. BMS Rozptyl napětí (Delta mV)\nconst delta = Number(t.deltaMv || 0);\nif (delta > 200) {\n    if (!alerts.bms) {\n        msgs.push({ payload: `🔋 **BMS VAROVÁNÍ:**\\nRozptyl napětí mezi články baterie je příliš velký (${delta} mV). Baterie může být rozbalancovaná nebo je jeden článek slabý.` });\n        alerts.bms = true;\n    }\n} else if (delta < 100) {\n    alerts.bms = false;\n}\n\n// 5. Přepětí v síti\nconst maxV = Math.max(Number(t.acL1||0), Number(t.acL2||0), Number(t.acL3||0));\nif (maxV > 253) {\n    if (!alerts.overvoltage) {\n        msgs.push({ payload: `⚡ **SÍŤOVÉ PŘEPĚTÍ:**\\nNapětí v distribuční síti je velmi vysoké (${maxV} V). Může docházet k omezování a vypínání střídačů.` });\n        alerts.overvoltage = true;\n    }\n} else if (maxV < 248) {\n    alerts.overvoltage = false;\n}\n\ncontext.set('sentAlerts', alerts);\n\nif (msgs.length > 0) {\n    return [msgs];\n}\nreturn null;\n",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 400,
+    "y": 600,
+    "wires": [
+      [
+        "ae46d16565bf08dd"
+      ]
     ]
   }
 ]
