@@ -3218,8 +3218,8 @@
     "id": "mqtt_hub4mode_in",
     "type": "mqtt in",
     "z": "3a5775f027c73512",
-    "name": "Settings Stream",
-    "topic": "N/+/settings/0/Settings/#",
+    "name": "Hub4Mode",
+    "topic": "N/+/settings/0/Settings/CGwacs/Hub4Mode",
     "qos": "0",
     "datatype": "json",
     "broker": "mqtt_broker_v57_local",
@@ -3271,6 +3271,48 @@
     "inputs": 0,
     "x": 150,
     "y": 850,
+    "wires": [
+      [
+        "18ba376f056a1b5d"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_in_dvcc",
+    "type": "mqtt in",
+    "z": "3a5775f027c73512",
+    "name": "Dvcc",
+    "topic": "N/+/settings/0/Settings/SystemSetup/Dvcc",
+    "qos": "0",
+    "datatype": "json",
+    "broker": "mqtt_broker_v57_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 150,
+    "y": 900,
+    "wires": [
+      [
+        "18ba376f056a1b5d"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_in_sts",
+    "type": "mqtt in",
+    "z": "3a5775f027c73512",
+    "name": "STS",
+    "topic": "N/+/settings/0/Settings/SystemSetup/SharedTemperatureSense",
+    "qos": "0",
+    "datatype": "json",
+    "broker": "mqtt_broker_v57_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 150,
+    "y": 950,
     "wires": [
       [
         "18ba376f056a1b5d"
