@@ -923,7 +923,7 @@
     "type": "function",
     "z": "proxmox_ui_bridge_v131",
     "name": "v166 Enerspot URL – Praha, PT15M, dnes + zítra",
-    "func": "const TOKEN = global.get('enerspotToken') || '1|QLsvNoeQqBpWd5fTDCXrXHUpX1MgX23HWvqdPkrz53e3ccb1';\nconst TIME_ZONE = 'Europe/Prague';\n\n// Proxmox může běžet v UTC. Datum proto vždy odvozujeme v českém pásmu.\nfunction ymdPrague(offsetDays) {\n  const d = new Date(Date.now() + Number(offsetDays || 0) * 86400000);\n  const parts = new Intl.DateTimeFormat('en-GB', {\n    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'\n  }).formatToParts(d).reduce((a, p) => { a[p.type] = p.value; return a; }, {});\n  return parts.year + '-' + parts.month + '-' + parts.day;\n}\n\nconst dateFrom = ymdPrague(0);\nconst dateTo = ymdPrague(2);\nmsg.method = 'GET';\nmsg.url = 'https://api.enerspot.cz/api/v1/spot-prices?from=' + dateFrom + '&to=' + dateTo + '&resolution=PT15M&tz=Europe%2FPrague&currency=CZK';\nmsg.headers = {\n  'Authorization': 'Bearer ' + TOKEN,\n  'Accept': 'application/json',\n  'X-Timezone': TIME_ZONE,\n  'User-Agent': 'Node-RED Proxmox v166'\n};\nmsg.requestTimeout = 15000;\nmsg.timeout = 15000;\nmsg.enerspotDate = dateFrom;\nmsg.enerspotDateTo = dateTo;\nnode.status({fill:'blue', shape:'dot', text:'stahuji ' + dateFrom + ' až ' + dateTo});\nreturn msg;",
+    "func": "const TOKEN = global.get('enerspotToken') || '';\nconst TIME_ZONE = 'Europe/Prague';\n\n// Proxmox může běžet v UTC. Datum proto vždy odvozujeme v českém pásmu.\nfunction ymdPrague(offsetDays) {\n  const d = new Date(Date.now() + Number(offsetDays || 0) * 86400000);\n  const parts = new Intl.DateTimeFormat('en-GB', {\n    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'\n  }).formatToParts(d).reduce((a, p) => { a[p.type] = p.value; return a; }, {});\n  return parts.year + '-' + parts.month + '-' + parts.day;\n}\n\nconst dateFrom = ymdPrague(0);\nconst dateTo = ymdPrague(2);\nmsg.method = 'GET';\nmsg.url = 'https://api.enerspot.cz/api/v1/spot-prices?from=' + dateFrom + '&to=' + dateTo + '&resolution=PT15M&tz=Europe%2FPrague&currency=CZK';\nmsg.headers = {\n  'Authorization': 'Bearer ' + TOKEN,\n  'Accept': 'application/json',\n  'X-Timezone': TIME_ZONE,\n  'User-Agent': 'Node-RED Proxmox v166'\n};\nmsg.requestTimeout = 15000;\nmsg.timeout = 15000;\nmsg.enerspotDate = dateFrom;\nmsg.enerspotDateTo = dateTo;\nnode.status({fill:'blue', shape:'dot', text:'stahuji ' + dateFrom + ' až ' + dateTo});\nreturn msg;",
     "outputs": 1,
     "x": 380,
     "y": 2400,
@@ -1549,8 +1549,8 @@
     "id": "40deb6f5125a4363",
     "type": "exec",
     "z": "7e59dbd18cdba2d6",
-    "command": "curl -sL \"https://raw.githubusercontent.com/pokladcz/nodered/main/Proxmox_v166_VICTRON_ESS_JEN_PREBYTKY_FV.json\" > /tmp/new_flow.json && curl -s -H \"Content-Type: application/json\" -H \"Node-RED-Deployment-Type: full\" -X POST -d @/tmp/new_flow.json http://127.0.0.1:1880/flows",
-    "addpay": "",
+    "command": "",
+    "addpay": true,
     "append": "",
     "useSpawn": "false",
     "timer": "",
@@ -1577,7 +1577,6 @@
     "id": "discord_token_auto",
     "type": "discord-token",
     "name": "Solar Bot Token",
-    "token": "MTU1MDQ1OTE4MTQ2NTYwNDE5OQ.GuCars.BISoZa8MazYOmfKocf-avm0nQzmeS6g2oWqN1w",
     "intents": 33280
   },
   {
