@@ -1283,7 +1283,7 @@
       ],
       [],
       [
-        "update_fetch_prox"
+        "update_fetch_cerbo"
       ]
     ]
   },
@@ -1689,9 +1689,7 @@
     "x": 1300,
     "y": 100,
     "wires": [
-      [
-        "update_fetch_cerbo"
-      ]
+      []
     ]
   },
   {
@@ -1756,7 +1754,9 @@
     "x": 700,
     "y": 160,
     "wires": [
-      []
+      [
+        "update_fetch_prox"
+      ]
     ]
   }
 ]
