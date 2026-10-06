@@ -1755,7 +1755,73 @@
     "y": 160,
     "wires": [
       [
+        "update_notify_cerbo"
+      ]
+    ]
+  },
+  {
+    "id": "update_notify_cerbo",
+    "type": "function",
+    "z": "7e59dbd18cdba2d6",
+    "name": "Notifikace Cerbo + Flag",
+    "func": "const out1 = Object.assign({}, msg);\nconst out2 = { payload: \"✅ **Cerbo** bylo úspěšně aktualizováno! Nyní stahuji a nasazuji kód pro Proxmox (bot se na cca 10 vteřin odmlčí)...\" };\nglobal.set('discord_notify_update_done', true);\nreturn [out1, out2];",
+    "outputs": 2,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 900,
+    "y": 160,
+    "wires": [
+      [
         "update_fetch_prox"
+      ],
+      [
+        "ae46d16565bf08dd"
+      ]
+    ]
+  },
+  {
+    "id": "update_startup_inject",
+    "type": "inject",
+    "z": "7e59dbd18cdba2d6",
+    "name": "Po startu",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 5,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 300,
+    "y": 420,
+    "wires": [
+      [
+        "update_startup_check"
+      ]
+    ]
+  },
+  {
+    "id": "update_startup_check",
+    "type": "function",
+    "z": "7e59dbd18cdba2d6",
+    "name": "Zkontrolovat Update Flag",
+    "func": "if (global.get('discord_notify_update_done') === true) {\n    global.set('discord_notify_update_done', false);\n    return { payload: \"✅ **Proxmox** byl úspěšně aktualizován a bot je zpět online! Vše běží na nejnovější verzi.\" };\n}\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 500,
+    "y": 420,
+    "wires": [
+      [
+        "ae46d16565bf08dd"
       ]
     ]
   }
