@@ -1768,7 +1768,7 @@
     "ret": "txt",
     "paytoqs": "ignore",
     "url": "",
-    "tls": "",
+    "tls": "prox_tls_cerbo_v131",
     "persist": false,
     "proxy": "",
     "insecureHTTPParser": false,
