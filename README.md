@@ -1,68 +1,129 @@
-# Victron Node-RED ESS & Řízení Přebytků FV
+# Victron: přebytky FV, zimní spánek a diagnostika
 
-Tento repozitář obsahuje komplexní systém pro automatizované řízení fotovoltaické elektrárny na platformě Victron Energy. Systém je kompletně postavený v Node-RED a rozdělen na dvě hlavní části pro zajištění maximální plynulosti, oddělení výkonu a čistého uživatelského rozhraní.
+Cerbo řídí MultiPlus a přebírá MQTT telemetrii. Proxmox poskytuje Dashboard 2.0,
+ceny, předpověď a diagnostické soubory. Soubory flow ponechávají původní názvy
+`Cerbo_v166_VICTRON_ESS_JEN_PREBYTKY_FV.json` a
+`Proxmox_v166_VICTRON_ESS_JEN_PREBYTKY_FV.json`. Nové části používají verzi 174.
 
-## 🏛️ Architektura systému
+## Provozní pravidla
 
-1. **Cerbo GX (Venus OS)**
-   - Stará se o kritickou "hard-realtime" logiku a všechny fyzické zápisy do měničů.
-   - Přebírá data přímo z Victron DBus/MQTT.
-   - Běží zde `Energy Manager v166`, watchdog uzly, a ovládání fyzických relé (Wattrouter, Bojler).
+- Finální cena je `(spot Kč/MWh - poplatek Kč/MWh) / 1000`.
+- Běžné cenové povolení i ruční povolení používá ON/ESS a přebytky FV. Samotná záporná cena nevynucuje nabíjení ze sítě.
+- Metoda A vybírá cenu do limitu a cíl 100 % SOC.
+- Metoda B vybírá nejvyšší cílové SOC ze splněných cenových stupňů. Hlavní limit nesmaže stupně.
+- Metoda C vybírá nastavený počet nejlevnějších čtvrthodin každého pražského dne. Shodné ceny rozhoduje čas začátku.
+- Den změny času může mít 92 nebo 100 čtvrthodin. Chybějící cena neprodlužuje předchozí interval.
+- Ceny, BMS, SOC, noc a přetížení ovlivňují výsledný režim. Tabulka ukazuje cenové povolení, nikoli zaručený nabíjecí proud.
+- Nouzový požadavek se zapne při SOC do 10 % a skončí při 15 %. Oba prahy lze nastavit.
+- Nouzové nabíjení vyžaduje čerstvá data BMS, povolené nabíjení a kladný limit proudu. Neobchází BMS ani bezpečný režim.
+- Při čerstvě potvrzeném odpojení AC vstupu nouzový požadavek ponechá Mode 3, nikoli Charger Only. Požadavek zůstává aktivní.
 
-2. **Proxmox (Externí server / LXC kontejner)**
-   - Hostuje hlavní grafický Dashboard pro uživatele (Node-RED Dashboard 2.0 - Vue.js).
-   - Stará se o komunikaci s internetem (stahování spotových cen Enerspot, počasí).
-   - Odesílá ceny a ruční povely na Cerbo přes HTTP/MQTT.
+SOC a skutečný výkon pro řízení pocházejí z vybraných JK BMS. Při výběru všech
+BMS musí být dostupný nastavený očekávaný počet. Kladný součet výkonů znamená
+tok do baterií. Chybějící nebo zastaralý výkon není nula.
 
----
+## Zimní spánek
 
-## 🚀 Hlavní automatizace a funkce (Energy Manager v166)
+Zimní režim je při prvním spuštění vypnutý. Výchozí práh spánku je 25 % SOC.
+Spánek vyžaduje čerstvý skutečný výkon pod 50 W po dobu 60 sekund.
+Export do sítě není podmínkou. SOC nad prahem sám spánek nespustí.
 
-Celý systém je plně závislý na SOC (stavu nabití). **Primárně používá přesné SOC počítané MultiPlusem (VE.Bus)**, v případě nedostupnosti padá na Venus OS SOC, a až jako poslední instanci na procenta z BMS.
+Automat uloží původní Optimized režim a vlastnictví změn na disk před prvním
+zápisem. Ověří Mode 3 a oba flagy `/Hub4/DisableFeedIn=1` a
+`/Hub4/DisableCharge=1`. Potom zapíše `/Settings/CGwacs/Hub4Mode=3`.
+Za spánek považuje pouze stav potvrzený MQTT zpětnou vazbou stejného GX a instance.
+Nepotvrzený vstup po 60 sekundách zahájí obnovu.
 
-### 1. Nabíjení ze sítě podle spotových cen
-Systém se automaticky rozhoduje, kdy nabít baterii levnou energií ze sítě:
-*   **Hlavní limit:** Nabíjí, pokud je cena elektřiny (včetně poplatku) **pod nastaveným limitem** a baterie není plná.
-*   **Záporná cena:** Pokud cena klesne pod nulu, systém začne automaticky nabíjet ZCELA VŽDY (bez ohledu na to, jak nízko je nastaven hlavní limit). Záporná cena je absolutní priorita pro spotřebu.
-*   **Dynamické 5-stupňové nabíjení:** Umožňuje nastavit 5 cenových hladin. Např. "pokud je cena pod 1.00 Kč, nabij na 80%", "pokud je pod 0.00 Kč, nabij na 100%". Systém dynamicky hlídá nejvyšší platný limit podle aktuálního nabití.
+Probuzení vyžaduje novou cenovou hranu: nejprve cenu nad limitem, potom přísně pod
+limitem. Rovnost není hrana. Automat obnoví přesně původní Hub4Mode 1 nebo 2.
+Teprve po potvrzení obnoví vlastní blokovací flagy. Potom ponechá 180 sekund na
+rozběh FV nabíjení. Pokud baterie znovu splní podmínky spánku, znovu usne.
+Trvale nízká cena nespouští opakované probouzení.
 
-### 2. Ochrana 100% nabité baterie při drahé síti
-*   Pokud baterie dosáhne **100 %** a aktuální cena ze sítě je **nad stanoveným limitem** (např. 2 Kč/kWh), systém automaticky přepne MultiPlus do režimu **Inverter Only (Mód 2)**.
-*   Tím zabrání přetokům do sítě za nevýhodnou (nebo zápornou) cenu a fyzicky donutí dům jet čistě z ostrovní energie, dokud se cena nevrátí do normálu nebo neklesne SOC.
+Nouzový požadavek, vypnutí zimy, ruční povolení, zákaz vybíjení BMS nebo ztráta
+potřebných dat zahájí obnovu Optimized. Dokud obnova není potvrzená, zimní automat
+blokuje souběžné zápisy Mode z watchdogu a běžného writeru.
+Po restartu nejprve obnoví vlastní rozpracovaný zimní stav.
 
-### 3. Nouzové nabíjení a ochrana baterie
-*   **Grid Shield (přepěťová ochrana):** Pokud napětí v síti stoupne nad limit (např. 253V), systém okamžitě zakáže export a přepne na nabíjení ze sítě, aby pomohl srazit lokální přepětí.
-*   **Nouzové nabíjení z BMS:** Pokud jakákoliv připojená JK BMS nahlásí kriticky nízký článek nebo vydá zákaz vybíjení, systém okamžitě přepne na nabíjení ze sítě (Charger Only) na bezpečné úrovně (do 25 % SOC).
+VE.Bus Mode 3 není totéž jako Hub4Mode 3. Automat nepoužívá Mode 4 (Off).
+Passthru neznamená nulovou spotřebu měniče. External control vypíná nativní ESS
+regulaci a BatteryLife. V tomto režimu nelze spoléhat na řízení maximálního
+vybíjecího proudu spravované baterie jako v Optimized.
 
-### 4. Inteligentní řízení zátěže (Relé 1, Relé 2, Shelly)
-Systém poskytuje detailní řízení spotřebičů podle ceny a stavu baterie:
-*   **Relé 1 (Wattrouter):** Zapíná se primárně při levné/záporné ceně, pokud to povolí BMS.
-*   **Relé 2 (Spirála/Bojler):** Ovladač přebytků. Může fungovat na základě levné ceny, nebo (primárně) hlídá SOC baterie. Pokud je SOC nad 91 %, zapne spirálu. Pokud SOC klesne pod 89 %, vypne ji. Ideální pro pálení solárních přebytků v létě do vody.
-*   **Shelly relé:** Samostatně řízené přes síť s možností vlastních podrobných pravidel v nastavení.
+Pokud program neběží nebo MQTT nefunguje, program nemůže potvrdit ani dokončit
+obnovu. Neodstraňujte `winter.json` během vlastněného spánku. Zimní chyba vyžaduje
+kontrolu telemetrie a uloženého stavu, nikoli slepý reset měniče.
 
-### 5. Diagnostika a hlídače (Self-Healing)
-*   **Ochrana ESS "Hub4Mode":** Systém na sběrnici skenuje, v jakém režimu ESS se nachází. Pokud zjistí `External control` (ve kterém baterie nefunguje), okamžitě zobrazí červený poplach v Dashboardu s jedním tlačítkem "OPRAVIT", které vše vrátí do `Optimized without BatteryLife`.
-*   **Ochrana DVCC:** Dashboard varuje a umožňuje 1-klikem zapnout VYPNOUTÉ DVCC (kritické pro záchranu baterie).
-*   **Shared Temperature Sense:** Upozorní, pokud se sdílí falešná teplota z MultiPlusu do baterie a umožní to vypnout.
-*   Systém si pravidelně (Watchdog) kontroluje stáří dat z Enerspotu, dostupnost SolaXu, kondici BMS atd. a informuje přes Discord webhooky.
+Zdroj rozhraní: [Victron ESS mode 2 and 3](https://www.victronenergy.com/live/ess:ess_mode_2_and_3).
 
----
+## Uložení nastavení
 
-## ⚙️ Výpočet ceny energie (Nákup/Výkup)
+Nové Function uzly vyžadují vestavěné Node.js moduly `fs`, `path` a `os`.
+Jejich vazby jsou součástí importu (`libs`). Node-RED musí podporovat asynchronní
+Function uzly a povolené moduly v záložce Setup. Pokud místní politika moduly
+zakazuje, import sám toto nastavení nezmění. Nejdříve schvalte potřebnou konfiguraci.
 
-Veškerá logika a limity v Node-RED operují se **sjednocenou Finální cenou (Kč/kWh)**.
-*   Enerspot API (nebo OTE) poskytuje surovou "Spot" cenu na trhu.
-*   Aby se systém rozhodoval správně, od této spot ceny se VŠUDE konzistentně **odečítá fixní poplatek (provize)**.
-*   **Vzorec:** `(Spot v Kč/MWh - Provize v Kč/MWh) / 1000 = Výsledná cena v Kč/kWh`
-*   Pokud je tedy spotová cena například `1000 Kč/MWh` a provize v nastavení je `300 Kč`, výsledná cena použitá v pravidlech je `0.70 Kč/kWh`.
-*   Záporná cena v celém programu vždy plnohodnotně vynucuje nabíjení a pálení elektřiny, dokonce má prioritu před cílovými SOC procenty.
+Datový adresář určuje `VICTRON_AUTOMATION_DIR` nebo interní
+`automationDataDir`. Výchozí umístění je `~/.victron-automation` účtu Node-RED.
+Na Cerbu zvolte adresář v trvalém zapisovatelném úložišti `/data`, nikoli RAM.
+V kontejneru Proxmox použijte trvalý svazek. Adresáře obou runtime jsou oddělené.
 
----
+Cerbo ukládá veřejná provozní nastavení do `settings.json`. Zápis používá dočasný
+soubor, `fsync` a přejmenování. Na Linuxu potvrzuje také adresář.
+Odpověď „potvrzeno“ přijde až po dokončení zápisu. Při chybě disku odpoví chybou
+a nepoužije nové hodnoty. Po restartu načte soubor až po původní inicializaci.
+Hodnoty `0` a `false` se zachovají. Hesla a tokeny do tohoto souboru nepatří.
 
-## 🛠️ Jak nasadit (Deployment)
+Při prvním importu bez souboru se převezmou povolené dosavadní hodnoty.
+Jednorázově se nastaví nouzová politika 10–15 % a běžné nabíjení pouze z FV.
+Po prvním importu proto zkontrolujte celý formulář před zapnutím automatického řízení.
 
-1. Smažte aktuální toky na vašem Node-RED a udělejte čistý **Import** souboru `Cerbo_...json` do Venus OS.
-2. Na externím serveru importujte `Proxmox_...json`.
-3. Klikněte na **Deploy**.
-4. Zkontrolujte IP adresy (v Proxmox konfiguraci zadejte IP adresu Cerba).
-5. V sekci Nastavení si upravte hodnotu `Poplatek k nákupní ceně Kč/MWh` tak, aby plně vyhovovala vašim tarifním podmínkám.
+## Diagnostika
+
+Proxmox ukládá změny stavů a pravidelné snímky do `events.jsonl` a tří rotovaných
+souborů. Každý soubor má nejvýše 1 MiB. Při souběžném zápisu počítá vynechané
+záznamy. Jde o omezené diagnostické okno, nikoli úplný dlouhodobý archiv.
+
+Snímky zahrnují rozhodnutí, BMS, měřený tok, zimní přechody, cenový plán,
+spojení, chyby uzlů a stav uložení. Verze a časy běhu pomáhají odlišit restart
+automatizace od restartu hostitele. Samotná změna Mode nebo State reboot nedokazuje.
+Logger vynechává hesla, tokeny, hlavičky, raw payloady a heslový registr SolaXu.
+Při stažení provede redakci znovu.
+
+Dashboard nabízí odkaz `GET /api/diagnostics/download`. Endpoint dědí stávající
+ochranu HTTP runtime. Tento import nemění autentizaci. Nevystavujte jej veřejně
+bez stávajícího ověřeného zabezpečení. Bundle není důkazem příčiny fyzické závady.
+
+## Kontrolované nasazení
+
+1. Exportujte aktuální flows a zálohujte trvalé datové adresáře obou runtime.
+2. Ověřte dostupné moduly, oprávnění k datovým adresářům a MQTT readbacky.
+3. Ověřte stávající konfiguraci Victron ESS pro zákaz exportu baterie a nabíjení jen z FV.
+4. Ponechte zimní režim vypnutý při prvním importu.
+5. Importujte odpovídající JSON na každém zařízení bez slepého smazání ostatních flows.
+6. Ověřte MQTT portál, instance, IP adresy a počet JK BMS.
+7. Uložte nastavení a ověřte potvrzení zápisu na disku Cerba.
+8. Restartujte pouze Node-RED a ověřte zachování nastavení.
+9. V diagnostice ověřte čerstvost cen, SOC, výkonu a Hub4 readbacků.
+10. Teprve při místním dohledu ověřte jeden zimní cyklus a návrat Optimized.
+
+Tyto změny nebyly nasazené na hardware. Offline test nenahrazuje zkoušku
+AC-out, přepnutí při výpadku sítě nebo součinnosti s firmwarem a BMS.
+Při návratu starých flows nejprve vypněte zimu a potvrďte obnovený Optimized.
+Samotný import starých flows nemusí obnovit nastavení, která vlastní nový automat.
+
+## Sestavení a testy
+
+`runtime/*.js` a `runtime/status.vue` jsou zdroje vložených Function a UI uzlů.
+Nasazení používá výsledné JSON soubory, nikoli samostatné soubory `runtime`.
+
+```sh
+node build-flows.cjs
+node --test winter-regression.cjs
+node --test offline-regression.cjs
+```
+
+Nová sada ověřuje zimní přechody, nouzové priority, uložení, plán a diagnostiku.
+Původní sada má sedm známých dřívějších selhání: detekci výpadku, zavádějící text
+watchdogu, měsíční archiv, denní archiv, dvě aktualizační větve a text STOP/AUTO.
+Nejsou součástí opravy zimního režimu. Nelze proto tvrdit, že celý projekt má zelené testy.
