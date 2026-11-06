@@ -15,10 +15,10 @@ function validateSettings(input, base) {
   return next;
 }
 const iso = new Date().toISOString();
-if (context.get('busy')) {
+if (global.get('settingsWriteBusyV174')) {
   msg.statusCode = 503; msg.payload = { ok: false, text: 'Ukladani probiha, opakujte pozdeji' }; return msg;
 }
-context.set('busy', true);
+global.set('settingsWriteBusyV174', true);
 try {
   if (msg._runtimeInit) {
     global.set('automationReady', false);
@@ -72,6 +72,6 @@ try {
   if (msg._runtimeInit) return null;
   msg.statusCode = 500; msg.payload = { ok: false, text: 'Nastaveni NEBYLA potvrzena na disku', persistence: global.get('settingsPersistence') }; return msg;
 } finally {
-  context.set('busy', false);
+  global.set('settingsWriteBusyV174', false);
   msg.headers = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 }
