@@ -56,10 +56,19 @@ if (!cfg.func.includes('msg._runtimeInit=true')) replace(cfg, 'return msg;', 'ms
 get(cerbo, '698012b937ecc429').wires = [['automation_settings_v174']];
 const handler = get(cerbo,'v139_dashboard_command_handler');
 if (!handler.func.includes('_durableSettingsRoute')) {
-  handler.outputs = 4; handler.wires.push(['automation_settings_v174']);
-  handler.func = "if(msg.payload?.action==='save_settings'){msg._durableSettingsRoute=true;return [null,null,null,msg];}\n" + handler.func;
+  handler.func = "// _durableSettingsRoute\n" + handler.func;
   replace(handler, "} else if (action === 'fix_hub4mode') {\n  msg._fixHub4Mode = true;\n  text = 'ESS přepnuto na Optimized bez BatteryLife';", "} else if (action === 'fix_hub4mode') {\n  ok=false; text='Obnovu vlastniho zimniho rezimu ridi stavovy automat; cizi ESS nastaveni se nemeni';");
 }
+const commandStart = handler.func.lastIndexOf("const body = msg.payload && typeof msg.payload === 'object'");
+if (commandStart < 0) throw new Error('Original API command handler missing');
+const commandBody = handler.func.slice(commandStart);
+// Keep the historical HTTP response output; imported three-output nodes must not drop saves.
+handler.func = "// _durableSettingsRoute\nif(msg.payload?.action==='save_settings'){\nconst reply=await(async()=>{\n" +
+  common + '\nconst SETTINGS_SCHEMA=' + JSON.stringify(publicSchema) + ';\n' + source('settings') +
+  '\n})();return [reply,null,null];}\n' + commandBody;
+handler.outputs = 3;
+handler.wires = handler.wires.slice(0, 3);
+handler.libs = libs;
 const manager = get(cerbo,'252b7ebcd48a5c07');
 if (!manager.func.includes('makePlan(')) {
   replace(manager, 'function num(x){ const n = Number(x);', "function num(x){ if(x===null||x===undefined||x==='')return NaN; const n = Number(x);");

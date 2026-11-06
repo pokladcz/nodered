@@ -1,6 +1,32 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { run, fixture, prox } = require('./winter-regression.cjs');
+const { run, fixture, prox, cerbo } = require('./winter-regression.cjs');
+
+test('settings save returns a durable reply on the original API response output', async () => {
+  const g = fixture();
+  await run(cerbo, 'automation_settings_v174', g, { _runtimeInit: true });
+  const result = await run(cerbo, 'v139_dashboard_command_handler', g, {
+    payload: { action: 'save_settings', settings: { chargeMethod: 'C' } }
+  });
+  // Existing installations have three API outputs; saving must not need a new fourth wire.
+  const reply = Array.isArray(result) ? result[0] : result;
+  assert.equal(reply?.statusCode, 200);
+  assert.equal(reply.payload.persistence.ok, true);
+  assert.equal(reply.payload.saved.chargeMethod, 'C');
+  assert.equal(g.get('chargeMethod'), 'C');
+});
+
+test('both settings endpoints share one disk-write lock', async () => {
+  const g = fixture();
+  await run(cerbo, 'automation_settings_v174', g, { _runtimeInit: true });
+  g.set('settingsWriteBusyV174', true);
+  for (const id of ['automation_settings_v174', 'v139_dashboard_command_handler']) {
+    const result = await run(cerbo, id, g, { payload: { action: 'save_settings', settings: { chargeMethod: 'B' } } });
+    const reply = Array.isArray(result) ? result[0] : result;
+    assert.equal(reply?.statusCode, 503);
+    assert.notEqual(g.get('chargeMethod'), 'B');
+  }
+});
 
 function component() {
   const source = prox.find(n => n.id === 'b0adaf6e2547060f').format;

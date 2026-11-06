@@ -193,7 +193,7 @@ test('dashboard save reaches durable Cerbo route and Proxmox changes only after 
   const request = await run(prox, 'prox_dash_send_fn_v131', pg, { payload: { action: 'save_settings', settings: { winterSleepSoc: 22 } } });
   assert.equal(pg.get('winterSleepSoc'), 25);
   const routed = await run(cerbo, 'v139_dashboard_command_handler', g, request);
-  const answer = await run(cerbo, 'automation_settings_v174', g, routed[3]);
+  const answer = routed[0];
   assert.equal(answer.statusCode, 200);
   await run(prox, 'prox_command_status_v131', pg, answer);
   assert.equal(pg.get('winterSleepSoc'), 22);
