@@ -27,7 +27,7 @@ test('both flow graphs have unique IDs, resolvable wires, and compilable functio
       for (const group of n.wires || []) for (const target of group) assert.ok(nodes.some(x => x.id === target), `${n.id} -> ${target}`);
       if (n.type === 'function') {
         assert.doesNotThrow(() => new Function('global', 'flow', 'context', 'node',
-          'return function(msg) {\n' + n.func + '\n};'), n.id);
+          'return async function(msg) {\n' + n.func + '\n};'), n.id);
       }
     }
   }
