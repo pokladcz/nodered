@@ -127,6 +127,38 @@ const status = get(prox,'prox_command_status_v131');
 if (!status.func.includes('pending_settings_v174')) {
   status.func = "let body=msg.payload;try{if(typeof body==='string')body=JSON.parse(body);}catch(error){body={ok:false,text:'Neplatna odpoved Cerba'};}\nconst ok=!msg.error&&Number(msg.statusCode)>=200&&Number(msg.statusCode)<300&&body?.ok===true;\nif(ok&&body.action==='save_settings'&&body.persistence?.ok===true){for(const[k,v]of Object.entries(body.saved||{}))global.set(k,v);global.set('settingsLastSaveTs',body.ts);}\nflow.set('pending_settings_v174',null);\nglobal.set('lastCommandResult',{ts:new Date().toISOString(),ok,text:body?.text||'Chyba API'});\nnode.status({fill:ok?'green':'red',shape:'dot',text:body?.text||'Chyba API'});msg.payload=(ok?'Potvrzeno: ':'SELHALO: ')+(body?.text||'Chyba API');msg.topic=ok?'Hotovo':'Chyba';return msg;";
 }
+if (!bridge.func.includes('_settingsSaveRequestId')) replace(bridge,
+  "if(action==='save_settings'){flow.set('pending_settings_v174',p.settings||{});",
+  "if(action==='save_settings'){msg._settingsSaveRequestId=String(p.requestId||msg._msgid||Date.now()).slice(0,100);flow.set('pending_settings_v174',p.settings||{});");
+status.func = `let body=msg.payload;
+try{if(typeof body==='string')body=JSON.parse(body);}catch(error){body={ok:false,text:'Neplatna JSON odpoved Cerba'};}
+const requestId=msg._settingsSaveRequestId;
+const isSettings=!!requestId||body?.action==='save_settings';
+const durable=body?.action==='save_settings'&&body.persistence?.ok===true&&Number.isFinite(Date.parse(body.persistence.ts));
+const ok=!msg.error&&Number(msg.statusCode)>=200&&Number(msg.statusCode)<300&&body?.ok===true&&(!isSettings||durable);
+const detail=msg.error?(msg.error.code||'TRANSPORT_ERROR'):(body?.text||'Chybi platna odpoved API');
+const text=ok?detail:((msg.error?'Spojeni s Cerbem: ':('HTTP '+(Number(msg.statusCode)||'?')+': '))+detail+(isSettings&&!durable&&body?.ok===true?' / chybi potvrzeni zapisu na disk':''));
+if(ok&&isSettings){for(const[k,v]of Object.entries(body.saved||{}))global.set(k,v);global.set('settingsLastSaveTs',body.persistence.ts);}
+if(requestId){global.set('settingsSaveResult',{requestId,ok,text,ts:new Date().toISOString(),savedAt:ok?body.persistence.ts:null});flow.set('pending_settings_v174',null);}
+global.set('lastCommandResult',{ts:new Date().toISOString(),ok,text});
+node.status({fill:ok?'green':'red',shape:'dot',text});
+const cached=global.get('settingsDashboardPayloadV174');
+const receipt=requestId&&cached?{_client:msg._client,payload:{...cached,settingsSaveResult:global.get('settingsSaveResult'),...(ok?{cfg:body.saved,persistence:body.persistence,settingsLastSaveTs:body.persistence.ts,chargePlan:body.chargePlan||cached.chargePlan}:{})}}:null;
+msg.payload=(ok?'Potvrzeno: ':'SELHALO: ')+text;msg.topic=ok?'Hotovo':'Chyba';return [msg,receipt];`;
+status.outputs=2;
+status.wires[1]=['b0adaf6e2547060f'];
+if (!poll.func.includes('settingsSaveResult:')) replace(poll, 'settingsSchema:schema,priceStatus,currentPrice,settingsLastSaveTs:', "settingsSchema:schema,priceStatus,currentPrice,settingsSaveResult:global.get('settingsSaveResult')||null,settingsLastSaveTs:");
+if (!poll.func.includes('cerboOnline&&body.persistence')) replace(poll,
+  "settingsLastSaveTs:global.get('settingsLastSaveTs')||null",
+  "settingsLastSaveTs:cerboOnline&&body.persistence?.ok===true?body.persistence.ts:null");
+if (!poll.func.includes("global.set('settingsDashboardPayloadV174'")) replace(poll,
+  'const debugMsg={payload:{', "global.set('settingsDashboardPayloadV174',settingsMsg.payload);\nconst debugMsg={payload:{");
+const form=get(prox,'b0adaf6e2547060f');
+form.format=form.format.replace(/<script>[\s\S]*?<\/script>/,'<script>\n'+source('settings-form')+'\n</script>');
+form.format=form.format.replace(':disabled="!schema.length"', ':disabled="!schema.length || isSaving"');
+form.format=form.format.replace('<button class="secondary" @click="reload">', '<button class="secondary" @click="reload" :disabled="isSaving">');
+form.format=form.format.replace('<span>{{ saveInfo }}</span>', '<span role="status" aria-live="polite" :class="{bad:saveState===\'error\'||saveState===\'timeout\'}">{{ saveInfo }}</span>');
+form.template=form.format;
 const proxZ=poll.z;
 node(prox,'diagnostics_store_v174','Sanitized rotating durable diagnostics v174',common+'\n'+source('diagnostics'),[[]],proxZ);
 node(prox,'diagnostics_download_v174','Read sanitized diagnostic bundle v174',common+"\nmsg._downloadDiagnostics=true;\n"+source('diagnostics'),[['diagnostics_response_v174']],proxZ);
