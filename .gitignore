@@ -1,0 +1,4 @@
+.inspection/
+.firecrawl/
+node_modules/
+.playwright-cli/

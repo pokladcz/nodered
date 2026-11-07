@@ -1,129 +1,176 @@
-# Victron: přebytky FV, zimní spánek a diagnostika
+# Victron + SolaX — opravené exporty v167
 
-Cerbo řídí MultiPlus a přebírá MQTT telemetrii. Proxmox poskytuje Dashboard 2.0,
-ceny, předpověď a diagnostické soubory. Soubory flow ponechávají původní názvy
-`Cerbo_v166_VICTRON_ESS_JEN_PREBYTKY_FV.json` a
-`Proxmox_v166_VICTRON_ESS_JEN_PREBYTKY_FV.json`. Nové části používají verzi 174.
+Tato verze obnovuje kompletní Cerbo z historie dodaného projektu a opravuje
+propojení s Proxmoxem. Přidává zimní Passthru podle zadaných podmínek.
+Původní soubory ve složce Downloads zůstávají beze změn.
 
-## Provozní pravidla
+## Soubory
 
-- Finální cena je `(spot Kč/MWh - poplatek Kč/MWh) / 1000`.
-- Běžné cenové povolení i ruční povolení používá ON/ESS a přebytky FV. Samotná záporná cena nevynucuje nabíjení ze sítě.
-- Metoda A vybírá cenu do limitu a cíl 100 % SOC.
-- Metoda B vybírá nejvyšší cílové SOC ze splněných cenových stupňů. Hlavní limit nesmaže stupně.
-- Metoda C vybírá nastavený počet nejlevnějších čtvrthodin každého pražského dne. Shodné ceny rozhoduje čas začátku.
-- Den změny času může mít 92 nebo 100 čtvrthodin. Chybějící cena neprodlužuje předchozí interval.
-- Ceny, BMS, SOC, noc a přetížení ovlivňují výsledný režim. Tabulka ukazuje cenové povolení, nikoli zaručený nabíjecí proud.
-- Nouzový požadavek se zapne při SOC do 10 % a skončí při 15 %. Oba prahy lze nastavit.
-- Nouzové nabíjení vyžaduje čerstvá data BMS, povolené nabíjení a kladný limit proudu. Neobchází BMS ani bezpečný režim.
-- Při čerstvě potvrzeném odpojení AC vstupu nouzový požadavek ponechá Mode 3, nikoli Charger Only. Požadavek zůstává aktivní.
+- `Cerbo_v167_ZIMNI_PASSTHRU.json` importujte na Cerbo GX.
+- `Proxmox_v167_ZIMNI_PASSTHRU.json` importujte na Proxmox.
+- `settings-context.cjs` obsahuje nastavení trvalého kontextu.
+- `KONTROLA.md` popisuje opravy, výsledky kontrol a omezení.
+- `test/flows.test.mjs` ověřuje logiku bez připojení k zařízení.
 
-SOC a skutečný výkon pro řízení pocházejí z vybraných JK BMS. Při výběru všech
-BMS musí být dostupný nastavený očekávaný počet. Kladný součet výkonů znamená
-tok do baterií. Chybějící nebo zastaralý výkon není nula.
+## Zimní režim
 
-## Zimní spánek
+Volba **Zimní režim** je v nastavení dashboardu. Výchozí hodnota je zapnuto.
+Program nepřepíná roční období podle kalendáře. Pravidlo platí, dokud tuto
+volbu nevypnete.
 
-Zimní režim je při prvním spuštění vypnutý. Výchozí práh spánku je 25 % SOC.
-Spánek vyžaduje čerstvý skutečný výkon pod 50 W po dobu 60 sekund.
-Export do sítě není podmínkou. SOC nad prahem sám spánek nespustí.
+| Aktuální stav | Podmínka | Výsledek |
+| --- | --- | --- |
+| Provoz | SoC < 20 % **a** přetok < 500 W | Uspat Victron |
+| Uspáno | Přetok > 500 W **a** cena po provizi > společný cenový limit | Probudit Victron |
+| Uspáno | Některá podmínka probuzení neplatí | Zůstat uspán |
+| Libovolný | Zimní režim vypnut v nastavení | Ukončit zimní zásah a obnovit původní ESS |
 
-Automat uloží původní Optimized režim a vlastnictví změn na disk před prvním
-zápisem. Ověří Mode 3 a oba flagy `/Hub4/DisableFeedIn=1` a
-`/Hub4/DisableCharge=1`. Potom zapíše `/Settings/CGwacs/Hub4Mode=3`.
-Za spánek považuje pouze stav potvrzený MQTT zpětnou vazbou stejného GX a instance.
-Nepotvrzený vstup po 60 sekundách zahájí obnovu.
+Při přesně 20 % se spánek neaktivuje. Při přesně 500 W nebo ceně rovné
+limitu se spánek neuvolní. Import ze sítě znamená přetok 0 W.
+Přetok je čistý součet všech fází, nikoli výkon samotných panelů.
+Při volbě všech BMS používá rozhodování nejnižší čerstvé SoC.
 
-Probuzení vyžaduje novou cenovou hranu: nejprve cenu nad limitem, potom přísně pod
-limitem. Rovnost není hrana. Automat obnoví přesně původní Hub4Mode 1 nebo 2.
-Teprve po potvrzení obnoví vlastní blokovací flagy. Potom ponechá 180 sekund na
-rozběh FV nabíjení. Pokud baterie znovu splní podmínky spánku, znovu usne.
-Trvale nízká cena nespouští opakované probouzení.
+Spánek zůstává zapamatovaný. Samotný růst SoC ho neukončí.
+Chybějící nebo stará cena či měření přetoku ho neukončí.
+Zimní spánek má přednost také před starým nouzovým dobíjením 10 → 25 %
+a před ručním nabíjením Victronu. Pro ruční nabíjení nejprve vypněte zimní režim.
+Ochrany uvnitř Victronu a BMS zůstávají účinné.
 
-Nouzový požadavek, vypnutí zimy, ruční povolení, zákaz vybíjení BMS nebo ztráta
-potřebných dat zahájí obnovu Optimized. Dokud obnova není potvrzená, zimní automat
-blokuje souběžné zápisy Mode z watchdogu a běžného writeru.
-Po restartu nejprve obnoví vlastní rozpracovaný zimní stav.
+Program zapisuje skutečné příznaky:
 
-VE.Bus Mode 3 není totéž jako Hub4Mode 3. Automat nepoužívá Mode 4 (Off).
-Passthru neznamená nulovou spotřebu měniče. External control vypíná nativní ESS
-regulaci a BatteryLife. V tomto režimu nelze spoléhat na řízení maximálního
-vybíjecího proudu spravované baterie jako v Optimized.
+- `/Hub4/DisableCharge = 1`
+- `/Hub4/DisableFeedIn = 1`
 
-Pokud program neběží nebo MQTT nefunguje, program nemůže potvrdit ani dokončit
-obnovu. Neodstraňujte `winter.json` během vlastněného spánku. Zimní chyba vyžaduje
-kontrolu telemetrie a uloženého stavu, nikoli slepý reset měniče.
+Oba příznaky blokují nabíjení přes Multi a dodávku ze střídače.
+Samostatný MPPT ani samostatný SolaX tím nejsou vypnuté.
+Program nepoužívá neexistující `/Hub4/DisableDischarge`.
+Polohu přepínače Multi drží na `Mode = 3` — On.
+To je jiná veličina než **režim řízení ESS**.
 
-Zdroj rozhraní: [Victron ESS mode 2 and 3](https://www.victronenergy.com/live/ess:ess_mode_2_and_3).
+Pro zimní zásah program dočasně přepne režim řízení ESS na externí.
+Před první změnou uloží původní režim do trvalého deníku.
+Po probuzení uvolní své dva zákazy a obnoví původní režim ESS.
+Žádné výkonové setpointy jednotlivých fází neposílá.
+Pokud ESS již řídí jiný externí regulátor, program ho nepřevezme.
 
-## Uložení nastavení
+Za potvrzené uspání považuje až čerstvý readback obou zákazů, externí ESS,
+polohu On a stav **Passthru — State 8**. Dashboard ukazuje čekání i potvrzení.
+Při výpadku sítě může Victron podle své vestavěné logiky napájet zálohovaný výstup.
+Zimní Passthru neznamená fyzické vypnutí měniče ani nulovou vlastní spotřebu.
 
-Nové Function uzly vyžadují vestavěné Node.js moduly `fs`, `path` a `os`.
-Jejich vazby jsou součástí importu (`libs`). Node-RED musí podporovat asynchronní
-Function uzly a povolené moduly v záložce Setup. Pokud místní politika moduly
-zakazuje, import sám toto nastavení nezmění. Nejdříve schvalte potřebnou konfiguraci.
+Pokud při uspání nemůže vzniknout přetok z jiného zdroje, podmínka probuzení
+nemusí nikdy nastat. Typicky jde o zapojení pouze s DC panely za uspaným Victronem.
+Pravidlo zde zůstává přesně podle zadání; výroba panelů ho nenahrazuje.
 
-Datový adresář určuje `VICTRON_AUTOMATION_DIR` nebo interní
-`automationDataDir`. Výchozí umístění je `~/.victron-automation` účtu Node-RED.
-Na Cerbu zvolte adresář v trvalém zapisovatelném úložišti `/data`, nikoli RAM.
-V kontejneru Proxmox použijte trvalý svazek. Adresáře obou runtime jsou oddělené.
+Oficiální popis příznaků, Passthru a výpadku sítě:
+[Victron ESS mode 2 and 3](https://www.victronenergy.com/live/ess:ess_mode_2_and_3).
 
-Cerbo ukládá veřejná provozní nastavení do `settings.json`. Zápis používá dočasný
-soubor, `fsync` a přejmenování. Na Linuxu potvrzuje také adresář.
-Odpověď „potvrzeno“ přijde až po dokončení zápisu. Při chybě disku odpoví chybou
-a nepoužije nové hodnoty. Po restartu načte soubor až po původní inicializaci.
-Hodnoty `0` a `false` se zachovají. Hesla a tokeny do tohoto souboru nepatří.
+## Import
 
-Při prvním importu bez souboru se převezmou povolené dosavadní hodnoty.
-Jednorázově se nastaví nouzová politika 10–15 % a běžné nabíjení pouze z FV.
-Po prvním importu proto zkontrolujte celý formulář před zapnutím automatického řízení.
+1. Zálohujte aktuální flows a nastavení obou instalací Node-RED.
+2. Na Cerbu ověřte ESS Assistant a běžný nativní režim ESS, nikoli cizí externí regulátor.
+3. Na Cerbu nastavte níže uvedený trvalý kontext **před aktivací nového flow**.
+4. Na Proxmoxu zapněte trvalý kontext pro nastavení a měsíční statistiky.
+5. Na Proxmoxu nainstalujte `@flowfuse/node-red-dashboard` a `node-red-contrib-discord-advanced`.
+6. Nahraďte původní flows odpovídajícími exporty v167. Nenechávejte běžet dvě verze writerů současně.
+7. V konfiguraci **Solar Bot** zadejte Discord token. V portálu Discordu povolte Message Content Intent.
+8. Ověřte MQTT na Cerbu a adresy uvedené níže. Proveďte úplný Deploy.
+9. V nastavení zadejte skutečný očekávaný počet BMS; výchozí hodnota je dvě.
+10. Na dashboardu ověřte BMS, ceny, skutečný přetok a stav zimního řízení.
 
-## Diagnostika
+Ověření na skutečném zařízení není součástí lokálních testů.
+Změny firmwaru, režimu ESS nebo zapojení mohou ovlivnit fyzický výsledek.
+První přechod do Passthru i probuzení zkontrolujte přímo na Cerbu.
 
-Proxmox ukládá změny stavů a pravidelné snímky do `events.jsonl` a tří rotovaných
-souborů. Každý soubor má nejvýše 1 MiB. Při souběžném zápisu počítá vynechané
-záznamy. Jde o omezené diagnostické okno, nikoli úplný dlouhodobý archiv.
+### Trvalý kontext
 
-Snímky zahrnují rozhodnutí, BMS, měřený tok, zimní přechody, cenový plán,
-spojení, chyby uzlů a stav uložení. Verze a časy běhu pomáhají odlišit restart
-automatizace od restartu hostitele. Samotná změna Mode nebo State reboot nedokazuje.
-Logger vynechává hesla, tokeny, hlavičky, raw payloady a heslový registr SolaXu.
-Při stažení provede redakci znovu.
+Soubor `settings-context.cjs` zkopírujte vedle stávajícího `settings.js` Node-RED.
+Do existujícího exportovaného objektu v `settings.js` přidejte nebo slučte:
 
-Dashboard nabízí odkaz `GET /api/diagnostics/download`. Endpoint dědí stávající
-ochranu HTTP runtime. Tento import nemění autentizaci. Nevystavujte jej veřejně
-bez stávajícího ověřeného zabezpečení. Bundle není důkazem příčiny fyzické závady.
-
-## Kontrolované nasazení
-
-1. Exportujte aktuální flows a zálohujte trvalé datové adresáře obou runtime.
-2. Ověřte dostupné moduly, oprávnění k datovým adresářům a MQTT readbacky.
-3. Ověřte stávající konfiguraci Victron ESS pro zákaz exportu baterie a nabíjení jen z FV.
-4. Ponechte zimní režim vypnutý při prvním importu.
-5. Importujte odpovídající JSON na každém zařízení bez slepého smazání ostatních flows.
-6. Ověřte MQTT portál, instance, IP adresy a počet JK BMS.
-7. Uložte nastavení a ověřte potvrzení zápisu na disku Cerba.
-8. Restartujte pouze Node-RED a ověřte zachování nastavení.
-9. V diagnostice ověřte čerstvost cen, SOC, výkonu a Hub4 readbacků.
-10. Teprve při místním dohledu ověřte jeden zimní cyklus a návrat Optimized.
-
-Tyto změny nebyly nasazené na hardware. Offline test nenahrazuje zkoušku
-AC-out, přepnutí při výpadku sítě nebo součinnosti s firmwarem a BMS.
-Při návratu starých flows nejprve vypněte zimu a potvrďte obnovený Optimized.
-Samotný import starých flows nemusí obnovit nastavení, která vlastní nový automat.
-
-## Sestavení a testy
-
-`runtime/*.js` a `runtime/status.vue` jsou zdroje vložených Function a UI uzlů.
-Nasazení používá výsledné JSON soubory, nikoli samostatné soubory `runtime`.
-
-```sh
-node build-flows.cjs
-node --test winter-regression.cjs
-node --test offline-regression.cjs
+```js
+contextStorage: require('./settings-context.cjs'),
 ```
 
-Nová sada ověřuje zimní přechody, nouzové priority, uložení, plán a diagnostiku.
-Původní sada má sedm známých dřívějších selhání: detekci výpadku, zavádějící text
-watchdogu, měsíční archiv, denní archiv, dvě aktualizační větve a text STOP/AUTO.
-Nejsou součástí opravy zimního režimu. Nelze proto tvrdit, že celý projekt má zelené testy.
+Nenahrazujte celý stávající `settings.js`. Zachovejte jeho ostatní nastavení
+a případná další úložiště. Po úpravě restartujte Node-RED.
+
+Úložiště `winter` používá samostatný adresář `winter-context` a `cache: false`.
+Dvě úložiště `localfilesystem` nesmějí zapisovat do stejného adresáře: běžná
+mezipaměť by mohla přepsat zimní deník. Použijte celý dodaný `settings-context.cjs`.
+Zimní writer čeká na dokončení zápisu
+před změnou ESS. Běžná nastavení používají úložiště `file` s běžnou mezipamětí.
+Jeho poslední změny se při náhlém výpadku mohou ztratit před zápisem mezipaměti.
+Správná konfigurace pojmenovaného úložiště je nutná; některé verze Node-RED
+při chybějícím názvu úložiště použijí výchozí kontext.
+
+**Aktualizace již běžící starší verze v167:** ještě se starými flows a původním
+kontextem vypněte zimní režim a počkejte na potvrzené obnovení původního nativního
+ESS a ukončení zimního zásahu. Dokud obnova není potvrzená, cestu úložiště neměňte.
+Potom zastavte Node-RED, zálohujte jeho kontext i flows, nahraďte konfiguraci
+kontextu a oba exporty a znovu spusťte Node-RED. Po kontrole telemetrie lze zimní
+režim opět zapnout. Samotné přesměrování úložiště při aktivním spánku by skrylo
+deník potřebný k obnově ESS.
+
+Proces Node-RED na Proxmoxu musí mít časové pásmo `Europe/Prague`.
+To určuje časy plánovaných zpráv Discordu.
+
+### Adresy a přístupy
+
+Výchozí adresy odpovídají původnímu exportu:
+
+| Služba | Adresa |
+| --- | --- |
+| Cerbo API | `https://192.168.0.124:1881` |
+| SolaX HTTP telemetrie | `http://192.168.0.156/api/realTimeData.htm` |
+| SolaX Modbus | `192.168.0.155:502` |
+| MQTT na Cerbu | `localhost:1883` |
+
+Nastavení HTTPS serveru, certifikátu a portu Cerba není součástí JSON exportu.
+Proxmox používá původní důvěru k self-signed certifikátu Cerba.
+Pokud máte jiný host, port nebo protokol, změňte konfiguraci před Deploy.
+Tasmota proxy používá stejné nastavení hostu, portu a protokolu Cerba jako ostatní požadavky.
+
+Export neobsahuje přístupové tokeny. Na Proxmoxu nastavte proměnnou prostředí
+`ENERSPOT_TOKEN` pro službu Node-RED a službu restartujte. Zachována je také
+kompatibilita s již nastaveným globálním kontextem `enerspotToken`, který má přednost.
+Bez tokenu se ceny nestahují; uzel Enerspot URL hlásí chybějící token.
+Discord token zadejte do konfigurace Solar Bot v editoru Node-RED.
+Tokeny neukládejte do exportů ani do Gitu.
+Přístup k ovládacím API chraňte v konfiguraci Node-RED nebo v reverzní proxy.
+JSON flow samo nenastavuje autentizaci HTTP serveru.
+
+## Kontrola bez hardwaru
+
+Z kořene projektu spusťte:
+
+```powershell
+rtk proxy node --test test/flows.test.mjs test/settings-ui.test.mjs
+```
+
+Testy spouštějí skutečný kód uzlů nad řízenými vstupy a časem.
+Neposílají požadavky na měniče, relé, Discord ani cenové API.
+
+Při celkové kontrole prošlo 59 automatických testů a 13 integračních scénářů
+ve dvou skutečných instancích Node-RED 5.0.9 s FlowFuse Dashboard 1.36.0.
+Simulované byly hranice zařízení a externích služeb; HTTP propojení Cerba
+s Proxmoxem a dashboard běžely skutečně. V prohlížeči bylo ověřeno všech šest
+stránek, uložení potvrzené Cerbem, výpadek spojení i mobilní zobrazení.
+Zimní deník přežil restart procesu a umožnil obnovit původní ESS.
+Výsledky jsou v `output/OVERENI.json`; fyzická FVE při testu připojená nebyla.
+
+## Přehlednější nastavení dashboardu
+
+Stránka nastavení má srozumitelné české popisky, jednotky a vysvětlení každé volby.
+Zimní režim ukazuje obě podmínky uspání a probuzení vedle sebe.
+Spotřebiče mají vlastní rozbalovací sekce. Adresy a ochranné časy jsou mezi technickými volbami.
+Časy původně zadávané v milisekundách se zobrazují v sekundách; program nadále ukládá stejné jednotky jako dříve.
+
+Tlačítko **Uložit změny** odesílá jen upravené hodnoty.
+Potvrzení se zobrazí až po načtení odpovídajících hodnot z Cerba.
+Pokud potvrzení do 20 sekund nepřijde, formulář zachová úpravy a dovolí další pokus.
+Při nedostupném Cerbu zůstanou rozepsané hodnoty viditelné, ale úpravy a ukládání
+se zablokují. Po obnovení spojení se rozepsané změny neztratí.
+Tlačítko **Zahodit změny** načte aktuální uložené hodnoty, nikoli výchozí nastavení.
+
+Pro tuto úpravu nahraďte oba exporty v167. Na Cerbu byl doplněn seznam povolených
+nastavení pro Wattrouter, bojler a export po nabití. Samotná řídicí pravidla se nezměnila.

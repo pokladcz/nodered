@@ -1,0 +1,56 @@
+[
+  {
+    "name": "Cerbo MQTT telemetry reaches Proxmox and both BMS cell lists",
+    "ok": true
+  },
+  {
+    "name": "Settings travel over real HTTP from Proxmox to Cerbo",
+    "ok": true
+  },
+  {
+    "name": "Cheap-price charge is confirmed by Mode feedback and SolaX R36 readback",
+    "ok": true
+  },
+  {
+    "name": "Winter enters real Node-RED async journal and reaches both blocks plus State 8",
+    "ok": true
+  },
+  {
+    "name": "Winter stays asleep with export above 500 W when price is not above limit",
+    "ok": true
+  },
+  {
+    "name": "Winter wakes only after price rises, restoring native ESS over actual MQTT paths",
+    "ok": true
+  },
+  {
+    "name": "SAFE MODE wins over manual relay ON and stops SolaX",
+    "ok": true
+  },
+  {
+    "name": "A null BMS safety field blocks charge and marks BMS as unavailable on the dashboard",
+    "ok": true
+  },
+  {
+    "name": "Tasmota request passes through Proxmox to the configured Cerbo host",
+    "ok": true
+  },
+  {
+    "name": "Discord command router can change a setting through the shared HTTP handler",
+    "ok": true
+  },
+  {
+    "name": "All dashboard routes are served by the real FlowFuse runtime",
+    "ok": true
+  },
+  {
+    "name": "No Function-node runtime errors",
+    "ok": true,
+    "errors": []
+  },
+  {
+    "name": "No attempted external-device connections",
+    "ok": true,
+    "blocked": []
+  }
+]
